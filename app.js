@@ -13,7 +13,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 const userRoutes = require('./routes/userRoutes');
+const contestRoutes = require('./routes/contestRoutes');
 app.use('/api/users', userRoutes);
+app.use('/api/contests', contestRoutes);
 
 // Connect to MongoDB
 connectDB();
