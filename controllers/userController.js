@@ -1,9 +1,5 @@
 const User = require('../models/User');
-const { verifyToken } = require('../middleware/auth'); // Assuming you have a middleware to verify Firebase token
-// Middleware to verify Firebase token
-const express = require('express');
-const router = express.Router();
-router.use(verifyToken); // Apply the middleware to all routes in this file
+
 
 const checkAdmin = (req, res, next) => {
     User.findOne({ uid: req.user.uid })

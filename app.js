@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-const userRoutes = require('./routes/user');
+const userRoutes = require('./routes/userRoutes');
 app.use('/api/users', userRoutes);
 
 // Connect to MongoDB
