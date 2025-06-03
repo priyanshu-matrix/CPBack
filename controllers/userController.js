@@ -56,7 +56,7 @@ const signup = async (req, res) => {
     res.json({ message: 'User synced', isAdmin: user.isAdmin });
 };
 
-const adminDashboard = async (req, res) => {
+const adminDashboard = async (_req, res) => {
     res.send('Welcome to Admin Dashboard');
 };
 
@@ -143,6 +143,54 @@ const checkContestRegistration = async (req, res) => {
     }
 };
 
+const changeUserStatus = async (req, res) => {
+    const { uid, contestId, contestStatus } = req.body;
+
+    try {
+        // Find the user to update
+        const user = await User.findOne({ uid });
+        
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update contest status if contestId and contestStatus are provided
+        if (contestId && contestStatus) {
+            const contestRegistration = user.registeredContests.find(
+                contest => contest.contestId.toString() === contestId
+            );
+
+            if (!contestRegistration) {
+                return res.status(404).json({ message: 'Contest registration not found for this user' });
+            }
+
+            // Validate that status is one of the allowed values
+            if (!['primary', 'semi-finalists', 'finalists'].includes(contestStatus)) {
+                return res.status(400).json({ message: 'Invalid contest status' });
+            }
+
+            contestRegistration.status = contestStatus;
+        }
+
+        await user.save();
+
+        res.json({ 
+            message: 'User status updated successfully', 
+            user: {
+                uid: user.uid,
+                name: user.name,
+                email: user.email,
+                isAdmin: user.isAdmin,
+                registeredContests: user.registeredContests
+            } 
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
 
 module.exports = {
     login,
@@ -152,5 +200,6 @@ module.exports = {
     checkAdmin,
     fetchAllUsers,
     registerContest,
-    checkContestRegistration
+    checkContestRegistration,
+    changeUserStatus
 };
