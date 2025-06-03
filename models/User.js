@@ -6,6 +6,21 @@ const userSchema = new mongoose.Schema({
   email: String,
   name: String,
   isAdmin: { type: Boolean, default: false }, // Set manually
+  registeredContests: [{
+    contestId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Contest' 
+    },
+    status: { 
+      type: String, 
+      enum: ['primary', 'semi-finalists', 'finalists'], 
+      default: 'primary' 
+    },
+    registeredAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 });
 
 module.exports = mongoose.model('User', userSchema);

@@ -73,10 +73,84 @@ const userInfo = async (req, res) => {
     }
 };
 
+const fetchAllUsers = async (_req, res) => {
+    try {
+        const users = await User.find({});
+        res.json(users);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+const registerContest = async (req, res) => {
+    const { uid } = req.user;
+    const { contestId } = req.body;
+
+    try {
+        const user = await User.findOne({ uid });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Check if the user is already registered for the contest
+        const alreadyRegistered = user.registeredContests.some(
+            (reg) => reg.contestId.toString() === contestId
+        );
+
+        if (alreadyRegistered) {
+            return res.status(400).json({ message: 'User already registered for this contest' });
+        }
+
+        // Register the user for the contest
+        user.registeredContests.push({ contestId });
+        await user.save();
+
+        res.json({ message: 'User registered for contest successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+const checkContestRegistration = async (req, res) => {
+    const { uid } = req.user;
+    const { contestId } = req.params;
+
+    try {
+        const user = await User.findOne({ uid });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Check if the user is already registered for the contest
+        const alreadyRegistered = user.registeredContests.some(
+            (reg) => reg.contestId.toString() === contestId
+        );
+
+        if (alreadyRegistered) {
+            return res.json({ registered: true });
+        } else {
+            return res.json({ registered: false });
+        }
+
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
 module.exports = {
     login,
     signup,
     adminDashboard,
     userInfo,
-    checkAdmin
+    checkAdmin,
+    fetchAllUsers,
+    registerContest,
+    checkContestRegistration
 };
