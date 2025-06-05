@@ -10,16 +10,17 @@ const http = require('http');
 const socketWrapper = require('./socket');
 
 const app = express();
-const server = http.createServer(app);
 
-// Initialize Socket.IO with the HTTP server                                
-socketWrapper.initialize(server);
 
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Initialize Socket.IO with the HTTP server                                
+const server = http.createServer(app);
+socketWrapper.initialize(server);
 
 // Routes
 const userRoutes = require('./routes/userRoutes');

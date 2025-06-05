@@ -92,6 +92,10 @@ const getContest = async (_req, res) => {
 async function createMatches(ContestID, round) {
     try {
         const contestdata = await Contest.findById(ContestID);
+        if (!contestdata) {
+            throw new Error("Contest not found");
+        }
+
         let usersList = [];
 
         if (round == 1) {
@@ -111,9 +115,15 @@ async function createMatches(ContestID, round) {
 
         usersList.sort(() => Math.random() - 0.5); // Shuffle the users list
 
-        const n = users.length;
-        const k = Math.log2(n) + 1;
-        const byes = 2 ** k - n;
+        const n = usersList.length;
+        const k = Math.floor(Math.log2(n)) + 1;
+        let byes = (2 ** k) - n;
+
+        if ((n & (n - 1)) === 0) {
+            byes = 0;
+        }
+
+        console.log(n, k, byes);
 
         const matches = [];
         for (let i = 0; i < n - byes; i += 2) {
@@ -121,6 +131,7 @@ async function createMatches(ContestID, round) {
                 matchId: `${ContestID}-${matches.length + 1}`,
                 user1: usersList[i],
                 user2: usersList[i + 1],
+                status: "pending", // Add default status
             });
         }
         if (byes > 0) {
@@ -128,7 +139,7 @@ async function createMatches(ContestID, round) {
                 matches.push({
                     matchId: `${ContestID}-${matches.length + 1}`,
                     user1: usersList[i],
-                    user2: null, // Bye,
+                    user2: 'Bye', // Bye,
                     winner: usersList[i], // Automatically assign the user as the winner
                     status: "completed",
                 });
@@ -143,22 +154,24 @@ async function createMatches(ContestID, round) {
             "Matches:",
             matches.length
         );
-        contestdata.matches[round] = matches;
+
+        const key = String(round);
+        contestdata.matches.set(key, matches);
+
         await contestdata.save();
 
         return matches;
     } catch (error) {
-        res
-            .status(500)
-            .json({ message: "Error fetching tour", error: error.message });
+        // Properly throw the error to be caught by the calling function
+        throw error;
     }
 }
 
 const startContestRound = async (req, res) => {
     try {
-        console.log(req.params);
-        const { ContestID } = req.params;
-        
+        console.log(req.body);
+        const { ContestID } = req.body;
+
         console.log("Starting contest round for ContestID:", ContestID);
         const contestData = await Contest.findById(ContestID);
         if (!contestData) {
@@ -178,25 +191,30 @@ const startContestRound = async (req, res) => {
             }
         }
 
-        const currentRound = prevRound++;
+        const currentRound = prevRound + 1;
         contestData.currentRound = currentRound;
 
         // Check if matches are already created
-        if (contestData.matches[currentRound].length > 0) {
-            return res
-                .status(400)
-                .json({ message: "Matches already created for this contest" });
+        if (contestData.matches[currentRound]) {
+
+            if (contestData.matches[currentRound].length > 0) {
+                return res
+                    .status(400)
+                    .json({ message: "Matches already created for this contest" });
+            }
+        } else {
+
+
+            // Create matches
+            const matches = await createMatches(ContestID, currentRound);
+            await contestData.save();
+
+            return res.status(200).json({
+                message: "Contest started successfully",
+                matches: matches,
+                round: currentRound,
+            });
         }
-
-        // Create matches
-        const matches = await createMatches(ContestID, currentRound);
-        await contestData.save();
-
-        res.status(200).json({
-            message: "Contest started successfully",
-            matches: matches,
-            round: currentRound,
-        });
     } catch (error) {
         res
             .status(500)
