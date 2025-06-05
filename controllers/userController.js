@@ -115,8 +115,15 @@ const registerContest = async (req, res) => {
 
         // Add the user to the contest's registered users
         const contest = await Contest.findById(contestId);
-        contest.registeredUsers.push({ uid, registeredAt: new Date() });
-        await contest.save();
+
+        if (!contest) {
+            return res.status(404).json({ message: "Contest not found" });
+        }
+
+        if (!contest.registeredUsers.includes(uid)) {
+            contest.registeredUsers.push(uid);
+            await contest.save();
+        }
 
         res.json({ message: "User registered for contest successfully" });
     } catch (error) {
