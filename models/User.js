@@ -7,14 +7,14 @@ const userSchema = new mongoose.Schema({
   name: String,
   isAdmin: { type: Boolean, default: false }, // Set manually
   registeredContests: [{
-    contestId: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: 'Contest' 
+    contestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Contest'
     },
-    status: { 
-      type: String, 
-      enum: ['primary', 'semi-finalists', 'finalists'], 
-      default: 'primary' 
+    status: {
+      type: String,
+      enum: ['primary', 'semi-finalists', 'finalists'],
+      default: 'primary'
     },
     registeredAt: {
       type: Date,
