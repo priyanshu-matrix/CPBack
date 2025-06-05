@@ -12,7 +12,7 @@ const matchSubSchema = new mongoose.Schema(
         },
         user2: {
             type: String,
-            required: true,
+            default: "Bye", // Default to "Bye" if no second user
         },
         winner: {
             type: String,
