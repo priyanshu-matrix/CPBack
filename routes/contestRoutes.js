@@ -7,6 +7,7 @@ const {
     deleteContest,
     getContest,
     startContestRound,
+    getContestById
 } = require("../controllers/contestController");
 
 const router = express.Router();
@@ -15,6 +16,7 @@ const router = express.Router();
 router.post("/add", verifyToken, checkAdmin, addContest);
 router.put("/edit/:id", verifyToken, checkAdmin, editContest);
 router.delete("/delete/:id", verifyToken, checkAdmin, deleteContest);
+router.get("/getcon/:id", verifyToken, getContestById);
 router.get("/getall", verifyToken, getContest);
 
 // start contest by admin, need contest id as request param

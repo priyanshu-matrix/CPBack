@@ -48,6 +48,20 @@ const deleteContest = async (req, res) => {
     }
 };
 
+// Get contest by ID
+const getContestById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const contest = await Contest.findById(id);
+        if (!contest) {
+            return res.status(404).json({ message: "Contest not found" });
+        }
+        res.status(200).json({ contest });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching contest", error: error.message });
+    }
+};
+
 // Get all contests
 const getContest = async (_req, res) => {
     try {
@@ -164,4 +178,5 @@ module.exports = {
     deleteContest,
     getContest,
     startContestRound,
+    getContestById
 };
