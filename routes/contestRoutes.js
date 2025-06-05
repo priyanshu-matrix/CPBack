@@ -7,6 +7,7 @@ const {
     deleteContest,
     getContest,
     startContestRound,
+    updateMatchWinner
     getContestById
 } = require("../controllers/contestController");
 
@@ -21,6 +22,7 @@ router.get("/getall", verifyToken, getContest);
 
 // start contest by admin, need contest id as request param
 router.post("/startContest", verifyToken, checkAdmin, startContestRound);
+router.post("/updateMatchWinner", verifyToken, checkAdmin, updateMatchWinner);
 
 
 module.exports = router;
