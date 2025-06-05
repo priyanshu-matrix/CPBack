@@ -14,7 +14,7 @@ router.get('/checkContestRegistration/:contestId', verifyToken, checkContestRegi
 router.post('/changeUserStatus', verifyToken, changeUserStatus);
 
 // Search match route
-router.post('/searchMatch', verifyToken, searchMatch);
+router.get('/searchMatch', verifyToken, searchMatch);
 
 
 module.exports = router;
