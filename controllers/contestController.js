@@ -91,19 +91,19 @@ const getContest = async (_req, res) => {
   }
 };
 
-async function createMatches(ContestID, round) {
+async function createMatches(ContestID, round, contestDataForMatches) {
   try {
-    const contestdata = await Contest.findById(ContestID);
-    if (!contestdata) {
-      throw new Error("Contest not found");
+    // Use the passed contestDataForMatches instead of fetching
+    if (!contestDataForMatches) {
+      throw new Error("Contest data not provided to createMatches");
     }
 
     let usersList = [];
 
     if (round == 1) {
-      usersList = [...(contestdata.registeredUsers || [])];
+      usersList = [...(contestDataForMatches.registeredUsers || [])];
     } else {
-      const prevMatchesData = contestdata.matches.get(String(round - 1));
+      const prevMatchesData = contestDataForMatches.matches.get(String(round - 1));
       if (!prevMatchesData) {
         throw new Error(
           `Cannot create matches for round ${round}: Previous round (${
@@ -168,13 +168,14 @@ async function createMatches(ContestID, round) {
       }
     }
 
-    // Ensure matches map exists
-    if (!contestdata.matches) {
-      contestdata.matches = new Map();
-    }
+    // Ensure matches map exists - This check is more relevant in the calling function before setting
+    // if (!contestdata.matches) {
+    //   contestdata.matches = new Map();
+    // }
 
-    contestdata.matches.set(String(round), matches);
-    await contestdata.save();
+    // Do not set matches on contestdata here, and do not save.
+    // contestdata.matches.set(String(round), matches);
+    // await contestdata.save(); 
 
     return matches;
   } catch (error) {
@@ -209,10 +210,11 @@ const startContestRound = async (req, res) => {
     }
 
     const currentRound = prevRound + 1;
-    contestData.currentRound = currentRound;
+    // contestData.currentRound = currentRound; // Set this after matches are created, before save
 
     const roundKey = String(currentRound);
-    const existingMatches = contestData.matches.get(roundKey);
+    const existingMatches = contestData.matches ? contestData.matches.get(roundKey) : undefined;
+
 
     if (existingMatches && existingMatches.length > 0) {
       return res.status(400).json({
@@ -220,9 +222,16 @@ const startContestRound = async (req, res) => {
       });
     }
 
-    const matches = await createMatches(ContestID, currentRound);
+    // Pass contestData to createMatches
+    const matches = await createMatches(ContestID, currentRound, contestData);
+
+    // Now update contestData with new round and matches
+    contestData.currentRound = currentRound;
+    if (!contestData.matches) {
+      contestData.matches = new Map();
+    }
     contestData.matches.set(roundKey, matches);
-    await contestData.save();
+    await contestData.save(); // Single save operation
 
     return res.status(200).json({
       message: "Contest started successfully",
