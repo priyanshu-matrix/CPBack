@@ -62,10 +62,11 @@ const contestSchema = new mongoose.Schema({
         default: [],
     },
     matches: {
-        type: Map,
-        of: [matchSubSchema],
-        default: {},
-    },
+    type: Map,
+    of: [matchSubSchema], // Single array instead of nested arrays
+    default: {},
+},
+
     currentRound: {
         type: Number,
         default: 0

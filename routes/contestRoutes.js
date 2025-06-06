@@ -7,7 +7,7 @@ const {
     deleteContest,
     getContest,
     startContestRound,
-    updateMatchWinner
+    updateMatchWinner,
     getContestById
 } = require("../controllers/contestController");
 
