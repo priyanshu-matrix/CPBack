@@ -99,28 +99,32 @@ async function createMatches(ContestID, round, contestDataForMatches) {
     }
 
     let usersList = [];
-
     if (round == 1) {
-      usersList = [...(contestDataForMatches.registeredUsers || [])];
+        usersList = [...(contestDataForMatches.registeredUsers || [])];
     } else {
-      const prevMatchesData = contestDataForMatches.matches.get(String(round - 1));
-      if (!prevMatchesData) {
-        throw new Error(
-          `Cannot create matches for round ${round}: Previous round (${
-            round - 1
-          }) matches not found.`
-        );
-      }
-      for (const match of prevMatchesData) {
-        if (match.winner && match.winner !== "Bye") {
-          if (match.winner === match.user1 || match.winner === match.user2) {
-            usersList.push(match.winner);
-          }
+        const prevMatchesData = contestDataForMatches.matches.get(String(round - 1));
+        if (!prevMatchesData) {
+            throw new Error(
+                `Cannot create matches for round ${round}: Previous round (${
+                    round - 1
+                }) matches not found.`
+            );
         }
-      }
+        for (const match of prevMatchesData) {
+            if (match.winner && match.winner !== "Bye") {
+                if (match.winner === match.user1 || match.winner === match.user2) {
+                    usersList.push(match.winner);
+                }
+            }
+        }
     }
-
+    
     const n = usersList.length;
+    const limit = Math.floor(Math.log2(contestDataForMatches.registeredUsers.length)) + 1; // Calculate the number of rounds needed
+    
+    if(round > limit) {
+        throw new Error(`Cannot create matches for round ${round}: Round exceeds the limit of ${limit} rounds.`);
+    }
     const matches = [];
 
     if (n === 0) {
