@@ -101,86 +101,93 @@ async function createMatches(ContestID, round) {
     let usersList = [];
 
     if (round == 1) {
-      const users = contestdata.registeredUsers;
-      usersList = [...users];
+      usersList = [...(contestdata.registeredUsers || [])];
     } else {
-      const prevMatches = contestdata.matches.get(String(round - 1));
-
-      for (const match of prevMatches) {
-        if (match.winner == match.user1) {
-          usersList.push(match.user1);
-        } else if (match.winner == match.user2) {
-          usersList.push(match.user2);
+      const prevMatchesData = contestdata.matches.get(String(round - 1));
+      if (!prevMatchesData) {
+        throw new Error(
+          `Cannot create matches for round ${round}: Previous round (${
+            round - 1
+          }) matches not found.`
+        );
+      }
+      for (const match of prevMatchesData) {
+        if (match.winner && match.winner !== "Bye") {
+          if (match.winner === match.user1 || match.winner === match.user2) {
+            usersList.push(match.winner);
+          }
         }
       }
     }
 
-    usersList.sort(() => Math.random() - 0.5); // Shuffle the users list
-
     const n = usersList.length;
-    const k = Math.floor(Math.log2(n)) + 1;
-    let byes = 2 ** k - n;
-
-    if ((n & (n - 1)) === 0) {
-      byes = 0;
-    }
-
-    console.log(n, k, byes);
-
     const matches = [];
-    for (let i = 0; i < n - byes; i += 2) {
+
+    if (n === 0) {
+      // No users, no matches
+    } else if (n === 1) {
+      // Single user gets a bye
       matches.push({
-        matchId: `${ContestID}-${matches.length + 1}`,
-        user1: usersList[i],
-        user2: usersList[i + 1],
-        status: "pending", // Add default status
+        matchId: `${ContestID}-${round}-1`,
+        user1: usersList[0],
+        user2: "Bye",
+        winner: usersList[0],
+        status: "completed",
       });
-    }
-    if (byes > 0) {
-      for (let i = n - byes; i < n; i++) {
+    } else {
+      // For n >= 2
+      usersList.sort(() => Math.random() - 0.5); // Shuffle the users list
+
+      let byes = 0;
+      const targetSize = 2 ** Math.ceil(Math.log2(n));
+      if (n !== targetSize) {
+        // if n is not a power of 2
+        byes = targetSize - n;
+      }
+
+      // Players who will play matches: first (n - byes) players
+      for (let i = 0; i < n - byes; i += 2) {
         matches.push({
-          matchId: `${ContestID}-${matches.length + 1}`,
+          matchId: `${ContestID}-${round}-${matches.length + 1}`,
           user1: usersList[i],
-          user2: "Bye", // Bye,
-          winner: usersList[i], // Automatically assign the user as the winner
+          user2: usersList[i + 1],
+          status: "pending",
+        });
+      }
+
+      // Players who get byes: remaining 'byes' players
+      for (let i = 0; i < byes; i++) {
+        const byeUserIndex = n - byes + i;
+        matches.push({
+          matchId: `${ContestID}-${round}-${matches.length + 1}`,
+          user1: usersList[byeUserIndex],
+          user2: "Bye",
+          winner: usersList[byeUserIndex],
           status: "completed",
         });
       }
     }
-
-    console.log(
-      "Matches created for contest:",
-      ContestID,
-      "Round:",
-      round,
-      "Matches:",
-      matches.length
-    );
 
     // Ensure matches map exists
     if (!contestdata.matches) {
       contestdata.matches = new Map();
     }
 
-    // Store matches for the current round
-    contestdata.matches.set(String(round), matches); // Store array directly
-
+    contestdata.matches.set(String(round), matches);
     await contestdata.save();
 
     return matches;
   } catch (error) {
-    // Properly throw the error to be caught by the calling function
+    // Rethrow the error to be caught by the calling function
     throw error;
   }
 }
 
 const startContestRound = async (req, res) => {
   try {
-    console.log(req.body);
     const { ContestID } = req.body;
 
     const contestData = await Contest.findById(ContestID);
-    console.log("Starting contest round for ContestID:", contestData);
     if (!contestData) {
       return res.status(404).json({ message: "Contest not found" });
     }
@@ -188,9 +195,12 @@ const startContestRound = async (req, res) => {
     let prevRound = contestData.currentRound || 0; // 0 = no round started
 
     if (prevRound >= 1) {
-      // round 1 occured
-      // Check if previous round is finished or not
       const previousRoundMatches = contestData.matches.get(String(prevRound));
+      if (!previousRoundMatches) {
+        return res.status(500).json({
+          message: `Internal error: Matches for previous round (${prevRound}) are missing.`,
+        });
+      }
       if (previousRoundMatches.some((match) => match.status !== "completed")) {
         return res
           .status(400)
@@ -201,8 +211,6 @@ const startContestRound = async (req, res) => {
     const currentRound = prevRound + 1;
     contestData.currentRound = currentRound;
 
-    // Check if matches are already created
-    // Properly check if matches for the current round exist and have entries
     const roundKey = String(currentRound);
     const existingMatches = contestData.matches.get(roundKey);
 
@@ -212,9 +220,7 @@ const startContestRound = async (req, res) => {
       });
     }
 
-    // Else, create matches
     const matches = await createMatches(ContestID, currentRound);
-    // Save the matches array into the Map
     contestData.matches.set(roundKey, matches);
     await contestData.save();
 
@@ -239,23 +245,42 @@ const updateMatchWinner = async (req, res) => {
       return res.status(404).json({ message: "Contest not found" });
     }
 
-    // Modify the loop to access Map properly:
     const currentRound = contestData.currentRound;
+    if (!currentRound) {
+        return res.status(400).json({ message: "Contest round not started or current round is not set." });
+    }
     const currentMatches = contestData.matches.get(String(currentRound));
 
+    if (!currentMatches) {
+      return res
+        .status(404)
+        .json({ message: `Matches for current round (${currentRound}) not found.` });
+    }
+
+    let matchFound = false;
     for (const match of currentMatches) {
       if (match.matchId === matchID) {
+        if (match.user1 !== uid && match.user2 !== uid) {
+            return res.status(400).json({ message: "Winner is not part of this match."});
+        }
         match.winner = uid;
         match.status = "completed";
+        matchFound = true;
         break;
       }
+    }
+
+    if (!matchFound) {
+      return res
+        .status(404)
+        .json({ message: `Match with ID ${matchID} not found in current round.` });
     }
 
     await contestData.save();
 
     res.status(200).json({
       message: "Match winner updated successfully",
-      matches: currentMatches,
+      matches: currentMatches, // Send back the updated list of matches for the round
     });
   } catch (error) {
     res
