@@ -245,7 +245,7 @@ const startContestRound = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: "Error starting contest", error: error.message });
+      .json({ message: error.message, error: error.message });
   }
 };
 
