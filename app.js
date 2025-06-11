@@ -25,9 +25,11 @@ socketWrapper.initialize(server);
 // Routes
 const userRoutes = require('./routes/userRoutes');
 const contestRoutes = require('./routes/contestRoutes');
+const compilerRoutes = require('./routes/compilerRoutes');
 
 app.use('/api/users', userRoutes);
 app.use('/api/contests', contestRoutes);
+app.use('/api/compiler', compilerRoutes); // Compiler routes
 
 // Connect to MongoDB
 connectDB();

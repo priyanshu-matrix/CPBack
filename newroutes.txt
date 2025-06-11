@@ -1,0 +1,2 @@
+http://localhost:3000/api/compiler/getLanguages
+http://localhost:3000/api/compiler/submitCode
