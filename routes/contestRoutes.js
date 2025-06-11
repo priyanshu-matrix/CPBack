@@ -28,7 +28,7 @@ router.post("/startContest", verifyToken, checkAdmin, startContestRound);
 router.post("/updateMatchWinner", verifyToken, checkAdmin, updateMatchWinner);
 
 // Add a problem to a contest
-router.post("/addProblemToContest", addProblemToContest); //will add authtoken and admin check later
+router.post("/addProblemToContest",verifyToken,checkAdmin, addProblemToContest); //will add authtoken and admin check later
 router.get("/getContestProblems/:id", verifyToken, checkAdmin, getContestProblems);
 router.get("/getRandomContestProblem/:id", verifyToken, getRandomContestProblem);
 //http://localhost:3000/api/contests/getContestProblems/:id

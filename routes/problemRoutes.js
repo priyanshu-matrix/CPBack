@@ -16,5 +16,5 @@ router.post('/add', verifyToken, checkAdmin, createProblem);
 router.put('/edit', verifyToken, checkAdmin, editProblem);
 router.delete('/delete', verifyToken, checkAdmin, deleteProblem);
 router.get('/get', verifyToken, getProblemById);
-router.get('/getall', verifyToken, getAllProblems);
+router.get('/getall', verifyToken,checkAdmin, getAllProblems);
 module.exports = router;
