@@ -8,7 +8,8 @@ const {
     getContest,
     startContestRound,
     updateMatchWinner,
-    getContestById
+    getContestById,
+    addProblemToContest
 } = require("../controllers/contestController");
 
 const router = express.Router();
@@ -24,5 +25,6 @@ router.get("/getall", verifyToken, getContest);
 router.post("/startContest", verifyToken, checkAdmin, startContestRound);
 router.post("/updateMatchWinner", verifyToken, checkAdmin, updateMatchWinner);
 
-
+// Add a problem to a contest
+router.post("/addProblemToContest", addProblemToContest); //will add authtoken and admin check later
 module.exports = router;

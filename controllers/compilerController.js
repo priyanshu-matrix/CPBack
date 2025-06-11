@@ -66,8 +66,11 @@ const submitCode = async (req, res) => {
         // Use delete require.cache[require.resolve(dataPath)] to ensure fresh data if file changes frequently
         // For simplicity, assuming it's loaded once per server start or changes are handled by server restart
         const questionsData = require(dataPath);
+        const User = require('../models/User'); // Added User model
+        const Problem = require('../models/Problems'); // Added Problem model
 
-        const { language_id, code, question_id } = req.body;
+
+        const { language_id, code, question_id, userId } = req.body; // Added userId
 
         if (!questionsData[question_id]) {
             return res.status(404).json({ error: `Question with ID ${question_id} not found.` });
@@ -113,6 +116,16 @@ const submitCode = async (req, res) => {
             message: "All test cases passed successfully!",
             details: lastResponse // Contains details of the last successful test case run
         });
+
+        // If code is accepted, mark problem as solved for the user
+        if (lastResponse.status.id === 3 && userId) {
+            const user = await User.findById(userId);
+            const problem = await Problem.findOne({ question_id: question_id }); // Assuming question_id in req.body maps to question_id in Problem model
+            if (user && problem && !user.solvedProblems.includes(problem._id)) {
+                user.solvedProblems.push(problem._id);
+                await user.save();
+            }
+        }
 
     } catch (error) {
         console.error('Error submitting code:', error.response ? error.response.data : error.message);

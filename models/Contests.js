@@ -49,6 +49,10 @@ const contestSchema = new mongoose.Schema({
         type: Number,
         required: true,
     },
+    problemlist: {
+        type: [String], // Array of problem IDs
+        default: [],
+    },
     level: {
         type: String,
         required: true,

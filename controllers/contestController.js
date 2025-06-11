@@ -1,4 +1,5 @@
 const Contest = require("../models/Contests");
+const Problem = require("../models/Problems"); // Import the Problem model
 const mongoose = require("mongoose"); // Import mongoose
 
 // Add a new contest
@@ -302,6 +303,52 @@ const updateMatchWinner = async (req, res) => {
   }
 };
 
+// Add a problem to a contest's problem list
+const addProblemToContest = async (req, res) => {
+  try {
+    const { ContestID, ProblemID } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(ContestID)) {
+      return res.status(400).json({ message: "Invalid Contest ID" });
+    }
+    // Assuming ProblemID is the `_id` of the problem document.
+    // If ProblemID refers to `question_id`, adjust the query accordingly.
+    if (!mongoose.Types.ObjectId.isValid(ProblemID)) {
+        return res.status(400).json({ message: "Invalid Problem ID" });
+    }
+
+    const contest = await Contest.findById(ContestID);
+    if (!contest) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    const problem = await Problem.findById(ProblemID);
+    if (!problem) {
+      return res.status(404).json({ message: "Problem not found" });
+    }
+
+    // Check if the problem is already in the contest's problem list
+    // Assuming problemlist stores problem._id
+    if (contest.problemlist.includes(problem._id.toString())) {
+      return res
+        .status(400)
+        .json({ message: "Problem already exists in the contest" });
+    }
+
+    contest.problemlist.push(problem._id.toString());
+    await contest.save();
+
+    res.status(200).json({
+      message: "Problem added to contest successfully"
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error adding problem to contest",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   addContest,
   editContest,
@@ -310,4 +357,5 @@ module.exports = {
   startContestRound,
   updateMatchWinner,
   getContestById,
+  addProblemToContest, // Export the new function
 };

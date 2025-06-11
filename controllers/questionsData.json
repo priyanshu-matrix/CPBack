@@ -1,5 +1,5 @@
 {
-    "1": {
+    "sum-two-numbers": {
         "testCases": [
             {
                 "input": "3 4",

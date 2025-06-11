@@ -20,6 +20,10 @@ const userSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
+  }],
+  solvedProblems: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Problem'
   }]
 });
 
