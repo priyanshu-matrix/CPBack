@@ -349,6 +349,77 @@ const addProblemToContest = async (req, res) => {
   }
 };
 
+// Get all problems from a contest's problem list
+const getContestProblems = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid Contest ID" });
+    }
+
+    const contest = await Contest.findById(id);
+    if (!contest) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    // Fetch all problems from the contest's problem list
+    const problems = await Problem.find({
+      _id: { $in: contest.problemlist }
+    });
+
+    res.status(200).json({
+      message: "Problems retrieved successfully",
+      problems: problems
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching contest problems",
+      error: error.message,
+    });
+  }
+};
+
+// Get a random problem from a contest's problem list
+const getRandomContestProblem = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid Contest ID" });
+    }
+
+    const contest = await Contest.findById(id);
+    if (!contest) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    if (!contest.problemlist || contest.problemlist.length === 0) {
+      return res.status(404).json({ message: "No problems found in this contest" });
+    }
+
+    // Get a random index from the problemlist
+    const randomIndex = Math.floor(Math.random() * contest.problemlist.length);
+    const randomProblemId = contest.problemlist[randomIndex];
+
+    // Fetch the random problem
+    const problem = await Problem.findById(randomProblemId);
+    if (!problem) {
+      return res.status(404).json({ message: "Problem not found" });
+    }
+
+    res.status(200).json({
+      message: "Random problem retrieved successfully",
+      problem: problem
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching random contest problem",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   addContest,
   editContest,
@@ -357,5 +428,7 @@ module.exports = {
   startContestRound,
   updateMatchWinner,
   getContestById,
-  addProblemToContest, // Export the new function
+  addProblemToContest, 
+  getContestProblems,
+  getRandomContestProblem
 };

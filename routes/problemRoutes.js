@@ -1,4 +1,6 @@
 const express = require('express');
+const { verifyToken } = require('../middleware/auth');
+const { checkAdmin } = require('../controllers/userController');
 
 // need to add authtoken later
 const {
@@ -10,9 +12,9 @@ const {
 } = require('../controllers/problemController');
 const router = express.Router();
 // Problem routes
-router.post('/add', createProblem);
-router.put('/edit', editProblem);
-router.delete('/delete', deleteProblem);
-router.get('/get', getProblemById);
-router.get('/getall', getAllProblems);
+router.post('/add', verifyToken, checkAdmin, createProblem);
+router.put('/edit', verifyToken, checkAdmin, editProblem);
+router.delete('/delete', verifyToken, checkAdmin, deleteProblem);
+router.get('/get', verifyToken, getProblemById);
+router.get('/getall', verifyToken, getAllProblems);
 module.exports = router;

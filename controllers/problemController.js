@@ -5,12 +5,11 @@ const Contest = require('../models/Contests'); // Corrected path
 // Create a new problem
 const createProblem = async (req, res) => {
     try {
-        const { title,question_id } = req.body;
+        const { title } = req.body;
         
         // Check if a problem with the same title already exists
         const existingProblem = await Problem.findOne({ title });
-        const existingProblemById = await Problem.findOne({ question_id });
-        if (existingProblem || existingProblemById) {
+        if (existingProblem ) {
             return res.status(400).json({ error: 'Problem already exists' });
         }
         

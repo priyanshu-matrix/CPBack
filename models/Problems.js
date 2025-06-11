@@ -112,7 +112,12 @@ const problemSchema = new mongoose.Schema({
         enum: ['Easy', 'Medium', 'Hard'],
         default: 'Easy',
         required: true
-    }
+    },
+    points : {
+        type: Number,
+        required: true,
+        default: 0
+    },
 });
 
 module.exports = mongoose.model('Problem', problemSchema);
