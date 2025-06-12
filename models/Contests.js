@@ -23,6 +23,10 @@ const matchSubSchema = new mongoose.Schema(
             enum: ["pending", "completed"],
             default: "pending",
         },
+        problemId: {
+            type: String,
+            default: null,
+        },
     },
     { _id: false }
 );

@@ -228,8 +228,19 @@ const startContestRound = async (req, res) => {
     }
 
     // Pass contestData to createMatches
-    const matches = await createMatches(ContestID, currentRound, contestData);
+    let matches = await createMatches(ContestID, currentRound, contestData);
 
+    // Assign a random problem to each non-bye match
+    if (contestData.problemlist && contestData.problemlist.length > 0) {
+      matches = matches.map(match => {
+        if (match.user2 !== "Bye") {
+          // Assign a random problem from the problemlist
+          const randomIndex = Math.floor(Math.random() * contestData.problemlist.length);
+          match.problemId = contestData.problemlist[randomIndex];
+        }
+        return match;
+      });
+    }
     // Now update contestData with new round and matches
     contestData.currentRound = currentRound;
     if (!contestData.matches) {
@@ -419,6 +430,114 @@ const getRandomContestProblem = async (req, res) => {
     });
   }
 };
+// Get match information for a specific user in the current round
+const getUserMatchInfo = async (req, res) => {
+  try {
+    const { ContestID,uid } = req.body;
+   // Get uid from authenticated user
+
+    if (!ContestID) {
+      return res.status(400).json({ message: "Contest ID is required" });
+    }
+
+    const contestData = await Contest.findById(ContestID);
+    if (!contestData) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    const currentRound = contestData.currentRound;
+    if (!currentRound) {
+      return res.status(400).json({ message: "Contest round not started or current round is not set." });
+    }
+
+    const currentMatches = contestData.matches.get(String(currentRound));
+    if (!currentMatches) {
+      return res.status(404).json({ message: `Matches for current round (${currentRound}) not found.` });
+    }
+
+    // Find the user's match
+    const userMatch = currentMatches.find(
+      match => (match.user1 === uid || match.user2 === uid)
+    );
+
+    if (!userMatch) {
+      return res.status(404).json({ message: "No match found for this user in the current round." });
+    }
+
+    // Determine opponent
+    const opponent = userMatch.user1 === uid ? userMatch.user2 : userMatch.user1;
+
+    let problemDetails = null;
+    if (userMatch.problemId) {
+      problemDetails = await Problem.findById(userMatch.problemId);
+      // Optionally, handle case where problemDetails is null (problem not found)
+      // For now, it will just be null in the response if not found.
+    }
+
+    res.status(200).json({
+      message: "Match information retrieved successfully",
+      matchInfo: {
+        matchId: userMatch.matchId,
+        userId: uid,
+        opponent: opponent,
+        problemId: userMatch.problemId || null,
+        status: userMatch.status,
+        winner: userMatch.winner || null,
+        round: currentRound
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching user match information",
+      error: error.message
+    });
+  }
+};
+// Submit a solution for a match problem
+const submitMatchSolution = async (req, res) => {
+  try {
+    const { ContestID, uid, problemId } = req.body;
+    // You may want to add a solution or answer field as well
+
+    const contestData = await Contest.findById(ContestID);
+    if (!contestData) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    const currentRound = contestData.currentRound;
+    if (!currentRound) {
+      return res.status(400).json({ message: "Contest round not started or current round is not set." });
+    }
+    const currentMatches = contestData.matches.get(String(currentRound));
+    if (!currentMatches) {
+      return res.status(404).json({ message: `Matches for current round (${currentRound}) not found.` });
+    }
+
+    // Find the user's match
+    const match = currentMatches.find(
+      m => (m.user1 === uid || m.user2 === uid)
+    );
+    if (!match) {
+      return res.status(404).json({ message: "No match found for this user in the current round." });
+    }
+    if (match.user2 === "Bye") {
+      return res.status(400).json({ message: "You are given a bye, wait till next round." });
+    }
+    if (match.status === "completed") {
+      return res.status(400).json({ message: "This match is already completed." });
+    }
+    if (match.problemId !== problemId) {
+      return res.status(400).json({ message: "Submitted problem does not match the assigned problem for this match." });
+    }
+    // If all checks pass, set winner and complete the match
+    match.winner = uid;
+    match.status = "completed";
+    await contestData.save();
+    res.status(200).json({ message: "Solution accepted, you are the winner of this match.", match });
+  } catch (error) {
+    res.status(500).json({ message: "Error submitting solution", error: error.message });
+  }
+};
 
 module.exports = {
   addContest,
@@ -430,5 +549,7 @@ module.exports = {
   getContestById,
   addProblemToContest, 
   getContestProblems,
-  getRandomContestProblem
+  getRandomContestProblem,
+  submitMatchSolution,
+  getUserMatchInfo
 };
