@@ -1,5 +1,6 @@
 const api_root = process.env.JUDGE0;
 const axios = require('axios');
+const TestCasesModel = require('../models/TestCases'); // Added TestCases model
 
 
 const getLanguages = async (req, res) => {
@@ -35,7 +36,6 @@ async function compileCodeUsingJudge0(code, input, expectedOutput, languageId,ti
 
         // Judge0 config vars:
         cpu_time_limit: timelimit,       // seconds
-        wall_time_limit: timelimit + 0.5, // Adjust wall time limit for contests
         cpu_extra_time: 0.5,       // seconds
         wall_time_limit: 2.0,       // seconds
         memory_limit: 262144,    // KB (256 MB)
@@ -62,40 +62,41 @@ async function compileCodeUsingJudge0(code, input, expectedOutput, languageId,ti
 
 const submitCode = async (req, res) => {
     try {
-        const path = require('path');
-        const dataPath = path.join(__dirname, 'questionsData.json');
-        // Use delete require.cache[require.resolve(dataPath)] to ensure fresh data if file changes frequently
-        // For simplicity, assuming it's loaded once per server start or changes are handled by server restart
-        const questionsData = require(dataPath);
-        const User = require('../models/User'); // Added User model
-        const Problem = require('../models/Problems'); // Added Problem model
+        const User = require('../models/User');
+        const Problem = require('../models/Problems');
 
 
-        const { language_id, code, question_id, userId, runSampleOnly } = req.body; // Added userId and runSampleOnly
+        const { language_id, code, question_id, userId, runSampleOnly } = req.body;
 
-        if (!questionsData[question_id]) {
-            return res.status(404).json({ error: `Question with ID ${question_id} not found.` });
+        // Fetch test cases from MongoDB
+        const problemDocument = await TestCasesModel.findOne({ problemId: question_id });
+
+        if (!problemDocument) {
+            return res.status(404).json({ error: `Question with ID ${question_id} not found or has no test cases.` });
         }
 
-        const questionDetails = questionsData[question_id];
-        if (!questionDetails.testCases || !Array.isArray(questionDetails.testCases) || questionDetails.testCases.length === 0) {
+        if (!problemDocument.testCases || !Array.isArray(problemDocument.testCases) || problemDocument.testCases.length === 0) {
             return res.status(400).json({ error: `No test cases found for question ID ${question_id}.` });
         }
 
         const base64EncodedCode = Buffer.from(code).toString('base64');
         let lastResponse = null;
 
-        let testCases = questionDetails.testCases;
+        let testCasesToRun = problemDocument.testCases;
 
         if (runSampleOnly === true) {
-            testCases = questionDetails.testCases.filter(testCase => testCase.isSample === true);
+            testCasesToRun = problemDocument.testCases.filter(testCase => testCase.isSample === true);
+            if (testCasesToRun.length === 0) {
+                return res.status(400).json({ error: `No sample test cases found for question ID ${question_id}.` });
+            }
         }
 
 
-        for (let i = 0; i < testCases.length; i++) {
-            const testCase = testCases[i];
+        for (let i = 0; i < testCasesToRun.length; i++) {
+            const testCase = testCasesToRun[i];
+            // Assuming compileCodeUsingJudge0 expects plain text input and output
             const response = await compileCodeUsingJudge0(base64EncodedCode, testCase.input, testCase.output, language_id);
-            lastResponse = response; // Store the latest response
+            lastResponse = response;
 
             // Judge0 status IDs: 3 = Accepted, 6 = Compilation Error
             // Other statuses (Wrong Answer, TLE, Runtime Error) also mean not accepted.
