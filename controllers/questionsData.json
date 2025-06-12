@@ -3,7 +3,8 @@
         "testCases": [
             {
                 "input": "3 4",
-                "output": "7"
+                "output": "7",
+                "isSample": true
             },
             {
                 "input": "10 20",

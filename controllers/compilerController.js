@@ -1,4 +1,4 @@
-const api_root = "http://158.178.243.53:2358";
+const api_root = process.env.JUDGE0;
 const axios = require('axios');
 
 
@@ -23,7 +23,7 @@ const getLanguages = async (req, res) => {
  * @param {string} expectedOutput – optional expected stdout (plain text)
  * @param {number} languageId – Judge0 language_id (integer)
  */
-async function compileCodeUsingJudge0(code, input, expectedOutput, languageId) {
+async function compileCodeUsingJudge0(code, input, expectedOutput, languageId,timelimit=1.0) {
     // Base64-encode text fields when using base64_encoded=true
     const payload = {
         source_code: code,
@@ -34,7 +34,8 @@ async function compileCodeUsingJudge0(code, input, expectedOutput, languageId) {
         language_id: languageId,
 
         // Judge0 config vars:
-        cpu_time_limit: 1.0,       // seconds
+        cpu_time_limit: timelimit,       // seconds
+        wall_time_limit: timelimit + 0.5, // Adjust wall time limit for contests
         cpu_extra_time: 0.5,       // seconds
         wall_time_limit: 2.0,       // seconds
         memory_limit: 262144,    // KB (256 MB)
@@ -70,7 +71,7 @@ const submitCode = async (req, res) => {
         const Problem = require('../models/Problems'); // Added Problem model
 
 
-        const { language_id, code, question_id, userId } = req.body; // Added userId
+        const { language_id, code, question_id, userId, runSampleOnly } = req.body; // Added userId and runSampleOnly
 
         if (!questionsData[question_id]) {
             return res.status(404).json({ error: `Question with ID ${question_id} not found.` });
@@ -84,8 +85,15 @@ const submitCode = async (req, res) => {
         const base64EncodedCode = Buffer.from(code).toString('base64');
         let lastResponse = null;
 
-        for (let i = 0; i < questionDetails.testCases.length; i++) {
-            const testCase = questionDetails.testCases[i];
+        let testCases = questionDetails.testCases;
+
+        if (runSampleOnly === true) {
+            testCases = questionDetails.testCases.filter(testCase => testCase.isSample === true);
+        }
+
+
+        for (let i = 0; i < testCases.length; i++) {
+            const testCase = testCases[i];
             const response = await compileCodeUsingJudge0(base64EncodedCode, testCase.input, testCase.output, language_id);
             lastResponse = response; // Store the latest response
 
@@ -101,19 +109,28 @@ const submitCode = async (req, res) => {
             }
 
             if (response.status.id !== 3) { // Not Accepted (Wrong Answer, TLE, Runtime Error etc.)
+                let testCaseNumber = i + 1;
+                let message = `Test case ${testCaseNumber} failed.`;
+                if (runSampleOnly === true && testCase.isSample === true) {
+                    message = `Sample test case ${testCaseNumber} failed.`;
+                }
                 return res.status(200).json({
                     overallStatus: response.status.description,
-                    message: `Test case ${i + 1} failed.`,
-                    failedTestCaseNumber: i + 1,
+                    message: message,
+                    failedTestCaseNumber: testCaseNumber,
                     details: response
                 });
             }
         }
 
         // If loop completes, all test cases passed
+        let message = "All test cases passed successfully!";
+        if (runSampleOnly === true) {
+            message = "All sample test cases passed successfully!";
+        }
         res.status(200).json({
             overallStatus: "Accepted",
-            message: "All test cases passed successfully!",
+            message: message,
             details: lastResponse // Contains details of the last successful test case run
         });
 
