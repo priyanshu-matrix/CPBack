@@ -1,6 +1,7 @@
 const express = require('express');
 const { verifyToken } = require('../middleware/auth');
 const { checkAdmin } = require('../controllers/userController');
+const multer = require('multer');
 
 // need to add authtoken later
 const {
@@ -12,7 +13,9 @@ const {
 } = require('../controllers/problemController');
 const router = express.Router();
 // Problem routes
-router.post('/add', verifyToken, checkAdmin, createProblem);
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.post('/add', upload.single('testCasesFile'), verifyToken, checkAdmin, createProblem);
 router.put('/edit', verifyToken, checkAdmin, editProblem);
 router.delete('/delete', verifyToken, checkAdmin, deleteProblem);
 router.post('/get', verifyToken, getProblemById);

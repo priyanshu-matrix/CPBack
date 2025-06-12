@@ -1,20 +1,90 @@
 const Problem = require('../models/Problems'); // Corrected path
 const User = require('../models/User'); // Corrected path
 const Contest = require('../models/Contests'); // Corrected path
+const TestCasesModel = require('../models/TestCases'); // Added import for TestCasesModel
+const JSZip = require('jszip'); // Added import for jszip
+const fs = require('fs'); // Added import for fs
+const path = require('path'); // Added import for path
 
 // Create a new problem
 const createProblem = async (req, res) => {
     try {
         const { title } = req.body;
-        
+        let { examples } = req.body; // Destructure examples
+
         // Check if a problem with the same title already exists
         const existingProblem = await Problem.findOne({ title });
-        if (existingProblem ) {
+        if (existingProblem) {
             return res.status(400).json({ error: 'Problem already exists' });
         }
-        
-        const problem = new Problem(req.body);
+
+        // If examples is a string, try to parse it as JSON
+        if (examples && typeof examples === 'string') {
+            try {
+                examples = JSON.parse(examples);
+            } catch (parseError) {
+                return res.status(400).json({ error: 'Invalid format for examples. Expected an array of objects or a valid JSON string.' });
+            }
+        }
+
+        // Construct the problem data, ensuring examples is correctly formatted or excluded if not provided
+        const problemData = { ...req.body };
+        if (examples) {
+            problemData.examples = examples;
+        } else {
+            // If examples are required by your schema and not provided, 
+            // Mongoose will throw a validation error. 
+            // Handle this case based on your application logic (e.g., provide default, or ensure client sends it)
+            // For now, we'll let Mongoose validation handle it if it's still missing and required.
+        }
+
+        const problem = new Problem(problemData);
         await problem.save();
+
+        if (req.file) {
+            const zip = new JSZip();
+            const data = await zip.loadAsync(req.file.buffer);
+            const files = data.files;
+            const testCases = [];
+            const inputFiles = {};
+            const outputFiles = {};
+
+            for (const fileName in files) {
+                if (!files[fileName].dir) {
+                    const fileData = await files[fileName].async('string');
+                    if (fileName.startsWith('input') && fileName.endsWith('.txt')) {
+                        const match = fileName.match(/input(\d+)\.txt/);
+                        if (match) {
+                            inputFiles[match[1]] = fileData;
+                        }
+                    } else if (fileName.startsWith('output') && fileName.endsWith('.txt')) {
+                        const match = fileName.match(/output(\d+)\.txt/);
+                        if (match) {
+                            outputFiles[match[1]] = fileData;
+                        }
+                    }
+                }
+            }
+
+            for (const numeral in inputFiles) {
+                if (outputFiles[numeral]) {
+                    testCases.push({
+                        input: inputFiles[numeral],
+                        output: outputFiles[numeral],
+                        isSample: false // Or determine this based on filename or other logic
+                    });
+                }
+            }
+
+            if (testCases.length > 0) {
+                const problemTestCases = new TestCasesModel({
+                    problemId: problem._id.toString(), // Use the actual problem ID
+                    testCases: testCases
+                });
+                await problemTestCases.save();
+            }
+        }
+
         res.status(201).json({ message: 'Problem created successfully', problem });
     } catch (error) {
         res.status(400).json({ error: error.message });
