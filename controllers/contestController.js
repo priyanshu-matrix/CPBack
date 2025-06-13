@@ -360,6 +360,44 @@ const addProblemToContest = async (req, res) => {
   }
 };
 
+// Remove a problem from a contest's problem list
+const removeProblemFromContest = async (req, res) => {
+  try {
+    const { ContestID, ProblemID } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(ContestID)) {
+      return res.status(400).json({ message: "Invalid Contest ID" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(ProblemID)) {
+      return res.status(400).json({ message: "Invalid Problem ID" });
+    }
+
+    const contest = await Contest.findById(ContestID);
+    if (!contest) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    // Check if the problem exists in the contest's problem list
+    const problemIndex = contest.problemlist.indexOf(ProblemID);
+    if (problemIndex === -1) {
+      return res.status(404).json({ message: "Problem not found in the contest" });
+    }
+
+    // Remove the problem from the contest's problem list
+    contest.problemlist.splice(problemIndex, 1);
+    await contest.save();
+
+    res.status(200).json({
+      message: "Problem removed from contest successfully"
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error removing problem from contest",
+      error: error.message,
+    });
+  }
+};
+
 // Get all problems from a contest's problem list
 const getContestProblems = async (req, res) => {
   try {
@@ -551,5 +589,6 @@ module.exports = {
   getContestProblems,
   getRandomContestProblem,
   submitMatchSolution,
-  getUserMatchInfo
+  getUserMatchInfo,
+  removeProblemFromContest
 };

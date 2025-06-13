@@ -12,7 +12,8 @@ const {
     addProblemToContest,
     getContestProblems,
     getRandomContestProblem,
-    getUserMatchInfo
+    getUserMatchInfo,
+    removeProblemFromContest
 } = require("../controllers/contestController");
 const { route } = require("./problemRoutes");
 
@@ -34,6 +35,7 @@ router.post("/updateMatchWinner", verifyToken, checkAdmin, updateMatchWinner);
 router.post("/addProblemToContest",verifyToken,checkAdmin, addProblemToContest); //will add authtoken and admin check later
 router.get("/getContestProblems/:id", verifyToken, checkAdmin, getContestProblems);
 router.get("/getRandomContestProblem/:id", verifyToken, getRandomContestProblem);
+router.post("/removeProblemFromContest", verifyToken, checkAdmin, removeProblemFromContest); // Remove a problem from a contest
 //http://localhost:3000/api/contests/getContestProblems/:id
 
 module.exports = router;
