@@ -116,9 +116,9 @@ const submitCode = async (req, res) => {
             
             // Debug: Log test case details
             console.log(`Running test case ${i + 1}:`);
-            console.log(`Input: ${testCase.input}`);
-            console.log(`Expected Output: ${testCase.output}`);
-            console.log(`Is Sample: ${testCase.isSample}`);
+            // console.log(`Input: ${testCase.input}`);
+            // console.log(`Expected Output: ${testCase.output}`);
+            // console.log(`Is Sample: ${testCase.isSample}`);
             
             // Assuming compileCodeUsingJudge0 expects plain text input and output
             const response = await compileCodeUsingJudge0(code, testCase.input, testCase.output, language_id);
