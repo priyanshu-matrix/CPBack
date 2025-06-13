@@ -2,7 +2,6 @@ const api_root = process.env.JUDGE0;
 const axios = require('axios');
 const TestCasesModel = require('../models/TestCases'); // Added TestCases model
 
-
 const getLanguages = async (req, res) => {
     try {
         const response = await axios.get(`${api_root}/languages`);
@@ -19,15 +18,30 @@ const getLanguages = async (req, res) => {
 
 /**
  * Compile and run code on Judge0 with full sandbox limits.
- * @param {string} code – source code (base64 encoded text)
+ * @param {string} code – source code (can be plain text or base64 encoded)
  * @param {string} input – program stdin (plain text)
  * @param {string} expectedOutput – optional expected stdout (plain text)
  * @param {number} languageId – Judge0 language_id (integer)
  */
 async function compileCodeUsingJudge0(code, input, expectedOutput, languageId,timelimit=1.0) {
+    // Function to check if string is valid base64
+    function isBase64(str) {
+        try {
+            // Check if it's a valid base64 string
+            const decoded = Buffer.from(str, 'base64').toString('utf8');
+            const reencoded = Buffer.from(decoded).toString('base64');
+            return reencoded === str;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Ensure code is base64 encoded
+    const base64Code = isBase64(code) ? code : Buffer.from(code).toString('base64');
+
     // Base64-encode text fields when using base64_encoded=true
     const payload = {
-        source_code: code,
+        source_code: base64Code,
         stdin: Buffer.from(input).toString('base64'),
         expected_output: expectedOutput
             ? Buffer.from(expectedOutput).toString('base64')
@@ -37,7 +51,7 @@ async function compileCodeUsingJudge0(code, input, expectedOutput, languageId,ti
         // Judge0 config vars:
         cpu_time_limit: timelimit,       // seconds
         cpu_extra_time: 0.5,       // seconds
-        wall_time_limit: 2.0,       // seconds
+        wall_time_limit: timelimit+0.5,       // seconds
         memory_limit: 262144,    // KB (256 MB)
         stack_limit: 8192,      // KB (8 MB)
         max_processes_and_or_threads: 50,
@@ -50,23 +64,28 @@ async function compileCodeUsingJudge0(code, input, expectedOutput, languageId,ti
     };
 
     // Submit and wait for immediate results
-    const res = await axios.post(
-        `${api_root}/submissions?base64_encoded=true&wait=true`,
-        payload,
-        { headers: { 'Content-Type': 'application/json' } }
-    );
+    try {
+        const res = await axios.post(
+            `${api_root}/submissions?base64_encoded=true&wait=true`,
+            payload,
+            { headers: { 'Content-Type': 'application/json' } }
+        );
 
-    // res.data contains stdout, stderr, compile_output, status, etc.
-    return res.data;
+        // res.data contains stdout, stderr, compile_output, status, etc.
+        return res.data;
+    } catch (error) {
+        console.error('Error in compileCodeUsingJudge0:', error.response?.data || error.message);
+        throw error;
+    }
 }
 
 const submitCode = async (req, res) => {
     try {
         const User = require('../models/User');
         const Problem = require('../models/Problems');
+        const Contest = require('../models/Contests');
 
-
-        const { language_id, code, question_id, userId, runSampleOnly } = req.body;
+        const { language_id, code, question_id, userId, runSampleOnly, contestId } = req.body;
 
         // Fetch test cases from MongoDB
         const problemDocument = await TestCasesModel.findOne({ problemId: question_id });
@@ -79,7 +98,7 @@ const submitCode = async (req, res) => {
             return res.status(400).json({ error: `No test cases found for question ID ${question_id}.` });
         }
 
-        const base64EncodedCode = Buffer.from(code).toString('base64');
+        // const base64EncodedCode = Buffer.from(code).toString('base64');
         let lastResponse = null;
 
         let testCasesToRun = problemDocument.testCases;
@@ -94,9 +113,19 @@ const submitCode = async (req, res) => {
 
         for (let i = 0; i < testCasesToRun.length; i++) {
             const testCase = testCasesToRun[i];
+            
+            // Debug: Log test case details
+            console.log(`Running test case ${i + 1}:`);
+            console.log(`Input: ${testCase.input}`);
+            console.log(`Expected Output: ${testCase.output}`);
+            console.log(`Is Sample: ${testCase.isSample}`);
+            
             // Assuming compileCodeUsingJudge0 expects plain text input and output
-            const response = await compileCodeUsingJudge0(base64EncodedCode, testCase.input, testCase.output, language_id);
+            const response = await compileCodeUsingJudge0(code, testCase.input, testCase.output, language_id);
             lastResponse = response;
+
+            // Debug: Log response status
+            console.log(`Test case ${i + 1} response status: ${response.status.id} - ${response.status.description}`);
 
             // Judge0 status IDs: 3 = Accepted, 6 = Compilation Error
             // Other statuses (Wrong Answer, TLE, Runtime Error) also mean not accepted.
@@ -129,21 +158,58 @@ const submitCode = async (req, res) => {
         if (runSampleOnly === true) {
             message = "All sample test cases passed successfully!";
         }
+
+        // If code is accepted, mark problem as solved for the user and update contest match
+        if (lastResponse.status.id === 3 && userId) {
+            // Update user's solved problems
+            const user = await User.findOne({ uid: userId }); // Use uid instead of _id since userId is likely the Firebase UID
+            const problem = await Problem.findById(question_id); // Use findById since question_id is likely the problem's _id
+            
+            if (user && problem) {
+                // Check if problem is not already solved
+                const alreadySolved = user.solvedProblems.some(solved => solved.problemId.toString() === problem._id.toString());
+                if (!alreadySolved) {
+                    user.solvedProblems.push({
+                        problemId: problem._id,
+                        solvedAt: new Date()
+                    });
+                    await user.save();
+                }
+
+                // If contestId is provided, update the contest match
+                if (contestId) {
+                    const contest = await Contest.findById(contestId);
+                    if (contest) {
+                        const currentRound = contest.currentRound;
+                        if (currentRound) {
+                            const currentMatches = contest.matches.get(String(currentRound));
+                            if (currentMatches) {
+                                // Find the user's match in the current round
+                                const userMatch = currentMatches.find(match => 
+                                    (match.user1 === userId || match.user2 === userId) && 
+                                    match.status === "pending"
+                                );
+                                
+                                if (userMatch) {
+                                    // Update match: set winner and mark as completed
+                                    userMatch.winner = userId;
+                                    userMatch.status = "completed";
+                                    await contest.save();
+                                    
+                                    message += " You have won the match!";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         res.status(200).json({
             overallStatus: "Accepted",
             message: message,
             details: lastResponse // Contains details of the last successful test case run
         });
-
-        // If code is accepted, mark problem as solved for the user
-        if (lastResponse.status.id === 3 && userId) {
-            const user = await User.findById(userId);
-            const problem = await Problem.findOne({ question_id: question_id }); // Assuming question_id in req.body maps to question_id in Problem model
-            if (user && problem && !user.solvedProblems.includes(problem._id)) {
-                user.solvedProblems.push(problem._id);
-                await user.save();
-            }
-        }
 
     } catch (error) {
         console.error('Error submitting code:', error.response ? error.response.data : error.message);

@@ -22,8 +22,14 @@ const userSchema = new mongoose.Schema({
     }
   }],
   solvedProblems: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Problem'
+    problemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Problem'
+    },
+    solvedAt: {
+      type: Date,
+      default: Date.now
+    }
   }]
 });
 
