@@ -192,11 +192,27 @@ const submitCode = async (req, res) => {
                                 
                                 if (userMatch) {
                                     // Update match: set winner and mark as completed
+                                    const opponentId = userMatch.user1 === userId ? userMatch.user2 : userMatch.user1;
                                     userMatch.winner = userId;
                                     userMatch.status = "completed";
                                     await contest.save();
                                     
                                     message += " You have won the match!";
+
+                                    // Emit socket event to user and opponent
+                                    const io = require('../socket').getIO();
+                                    io.to(userId).emit('matchUpdate', {
+                                        contestId,
+                                        matchId: userMatch._id,
+                                        status: 'won',
+                                        opponentId
+                                    });
+                                    io.to(opponentId).emit('matchUpdate', {
+                                        contestId,
+                                        matchId: userMatch._id,
+                                        status: 'lost',
+                                        opponentId: userId
+                                    });
                                 }
                             }
                         }

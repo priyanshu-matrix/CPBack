@@ -13,7 +13,7 @@ router.post('/registerContest', verifyToken, registerContest);
 router.get('/checkContestRegistration/:contestId', verifyToken, checkContestRegistration);
 router.post('/changeUserStatus', verifyToken, changeUserStatus);
 router.post('/getUserByUid/', verifyToken, getUserByUid);
-
+//http://localhost:3000/api/users/getUserByUid
 // Search match route
 router.get('/searchMatch', verifyToken, searchMatch);
 
