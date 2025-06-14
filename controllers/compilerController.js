@@ -1,6 +1,32 @@
 const api_root = process.env.JUDGE0;
 const axios = require("axios");
+const http = require('http');
+const https = require('https');
 const TestCasesModel = require("../models/TestCases"); // Added TestCases model
+
+// Configure axios to use connection pooling
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true });
+
+// Use the agents for all axios requests
+axios.defaults.httpAgent = httpAgent;
+axios.defaults.httpsAgent = httpsAgent;
+
+// Simple in-memory cache for compilation results
+// This helps avoid redundant compilations for identical code
+const compilationCache = new Map();
+// Cache expiry in milliseconds (5 minutes)
+const CACHE_TTL = 5 * 60 * 1000;
+
+// Periodic cache cleanup to prevent memory leaks
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of compilationCache.entries()) {
+        if (now > value.timestamp + CACHE_TTL) {
+            compilationCache.delete(key);
+        }
+    }
+}, 60 * 1000); // Run cleanup every minute
 
 const getLanguages = async (req, res) => {
     try {
@@ -52,6 +78,22 @@ async function compileCodeUsingJudge0(
     const base64Code = isBase64(code)
         ? code
         : Buffer.from(code).toString("base64");
+    
+    // Create a cache key based on code, input, and language
+    const submissionCacheKey = `${base64Code}_${Buffer.from(input).toString("base64")}_${languageId}`;
+    
+    // Check if we have a cached result
+    if (compilationCache.has(submissionCacheKey)) {
+        const cachedResult = compilationCache.get(submissionCacheKey);
+        // Only return from cache if it's still valid
+        if (Date.now() - cachedResult.timestamp < CACHE_TTL) {
+            console.log("Cache hit for compilation result");
+            return cachedResult.data;
+        } else {
+            // Expired cache entry
+            compilationCache.delete(submissionCacheKey);
+        }
+    }
 
     // Base64-encode text fields when using base64_encoded=true
     const payload = {
@@ -62,13 +104,13 @@ async function compileCodeUsingJudge0(
             : undefined,
         language_id: languageId,
 
-        // Judge0 config vars:
+        // Judge0 config vars - optimized:
         cpu_time_limit: timelimit, // seconds
-        cpu_extra_time: 0.5, // seconds
-        wall_time_limit: timelimit + 0.5, // seconds
+        cpu_extra_time: 0.3, // reduced from 0.5 to improve speed
+        wall_time_limit: timelimit + 0.3, // reduced from timelimit+0.5
         memory_limit: 262144, // KB (256 MB)
-        stack_limit: 8192, // KB (8 MB)
-        max_processes_and_or_threads: 50,
+        stack_limit: 16384, // KB (16 MB) - increased to prevent stack overflows
+        max_processes_and_or_threads: 60, // increased from 50
         enable_per_process_and_thread_time_limit: true,
         enable_per_process_and_thread_memory_limit: true,
         max_file_size: 1024, // KB (1 MB)
@@ -77,20 +119,44 @@ async function compileCodeUsingJudge0(
         number_of_runs: 1,
     };
 
+    // Check cache first
+    const cacheKey = `${languageId}:${base64Code}:${Buffer.from(input).toString("base64")}`;
+    if (compilationCache.has(cacheKey)) {
+        const cachedResult = compilationCache.get(cacheKey);
+        console.log("Cache hit for compilation:", cacheKey);
+        return cachedResult.response;
+    }
+
     // Submit and wait for immediate results
     try {
+        const headers = {
+            "Content-Type": "application/json",
+            "X-Auth-User": "A7LeM6fbRMwgeMJ",
+            "X-Auth-Token": "A7LeM6fbRMwgeMJ",
+        };
+        
+        // Use wait=true but with a shorter timeout - good balance between async and sync
         const res = await axios.post(
             `${api_root}/submissions?base64_encoded=true&wait=true`,
             payload,
             {
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Auth-User": "A7LeM6fbRMwgeMJ",
-                    "X-Auth-Token": "A7LeM6fbRMwgeMJ",
-                },
+                headers,
+                timeout: 10000, // 10 second timeout to avoid hanging requests
             }
         );
 
+        // Cache the response
+        compilationCache.set(cacheKey, {
+            response: res.data,
+            timestamp: Date.now(),
+        });
+
+        // Store result in cache
+        compilationCache.set(submissionCacheKey, {
+            data: res.data,
+            timestamp: Date.now()
+        });
+        
         // res.data contains stdout, stderr, compile_output, status, etc.
         return res.data;
     } catch (error) {
@@ -135,8 +201,6 @@ const submitCode = async (req, res) => {
         }
 
         // const base64EncodedCode = Buffer.from(code).toString('base64');
-        let lastResponse = null;
-
         let testCasesToRun = problemDocument.testCases;
 
         if (runSampleOnly === true) {
@@ -151,46 +215,57 @@ const submitCode = async (req, res) => {
                     });
             }
         }
-
-        for (let i = 0; i < testCasesToRun.length; i++) {
-            const testCase = testCasesToRun[i];
-
-            // Debug: Log test case details
-            console.log(`Running test case ${i + 1}:`);
-            // console.log(`Input: ${testCase.input}`);
-            // console.log(`Expected Output: ${testCase.output}`);
-            // console.log(`Is Sample: ${testCase.isSample}`);
-
-            // Assuming compileCodeUsingJudge0 expects plain text input and output
-            const response = await compileCodeUsingJudge0(
+        
+        console.log(`Running ${testCasesToRun.length} test cases in parallel`);
+        
+        // Check for compilation errors first with just one quick submission
+        // This avoids wasting resources on multiple submissions if code doesn't compile
+        const compilationCheck = await compileCodeUsingJudge0(
+            code,
+            "", // Empty input for compilation check
+            "",
+            language_id
+        );
+        
+        if (compilationCheck.status.id === 6) {
+            // Compilation Error
+            return res.status(200).json({
+                overallStatus: "Compilation Error",
+                message: "Code compilation failed.",
+                details: compilationCheck,
+            });
+        }
+        
+        // Process all test cases in parallel using Promise.all
+        const testCasePromises = testCasesToRun.map((testCase, index) => {
+            console.log(`Starting test case ${index + 1}`);
+            return compileCodeUsingJudge0(
                 code,
                 testCase.input,
                 testCase.output,
                 language_id
-            );
-            lastResponse = response;
-
-            // Debug: Log response status
-            console.log(
-                `Test case ${i + 1} response status: ${response.status.id} - ${response.status.description
-                }`
-            );
-
-            // Judge0 status IDs: 3 = Accepted, 6 = Compilation Error
-            // Other statuses (Wrong Answer, TLE, Runtime Error) also mean not accepted.
-
-            if (response.status.id === 6) {
-                // Compilation Error
-                return res.status(200).json({
-                    overallStatus: "Compilation Error",
-                    message: "Code compilation failed.",
-                    details: response,
-                });
-            }
-
+            ).then(response => {
+                console.log(
+                    `Test case ${index + 1} response status: ${response.status.id} - ${response.status.description}`
+                );
+                return {
+                    response,
+                    index,
+                    testCase
+                };
+            });
+        });
+        
+        // Wait for all test cases to complete
+        const testResults = await Promise.all(testCasePromises);
+        
+        // Check test results in order
+        for (const result of testResults) {
+            const { response, index, testCase } = result;
+            
             if (response.status.id !== 3) {
                 // Not Accepted (Wrong Answer, TLE, Runtime Error etc.)
-                let testCaseNumber = i + 1;
+                let testCaseNumber = index + 1;
                 let message = `Test case ${testCaseNumber} failed.`;
                 if (runSampleOnly === true && testCase.isSample === true) {
                     message = `Sample test case ${testCaseNumber} failed.`;
@@ -203,6 +278,9 @@ const submitCode = async (req, res) => {
                 });
             }
         }
+        
+        // If we reach here, all tests passed
+        const lastResponse = testResults[testResults.length - 1].response;
 
         // If loop completes, all test cases passed
         let message = "All test cases passed successfully!";
