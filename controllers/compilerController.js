@@ -142,6 +142,7 @@ async function compileCodeUsingJudge0(
             {
                 headers,
                 timeout: 10000, // 10 second timeout to avoid hanging requests
+                signal: AbortSignal.timeout(5000) // Additional safety to ensure we can abort requests
             }
         );
 
@@ -236,47 +237,96 @@ const submitCode = async (req, res) => {
             });
         }
         
-        // Process all test cases in parallel using Promise.all
+        // Create a controller to abort running tests when one fails
+        const controller = new AbortController();
+        const signal = controller.signal;
+
+        // Process test cases with early termination
         const testCasePromises = testCasesToRun.map((testCase, index) => {
             console.log(`Starting test case ${index + 1}`);
-            return compileCodeUsingJudge0(
-                code,
-                testCase.input,
-                testCase.output,
-                language_id
-            ).then(response => {
-                console.log(
-                    `Test case ${index + 1} response status: ${response.status.id} - ${response.status.description}`
-                );
-                return {
-                    response,
-                    index,
-                    testCase
-                };
-            });
+            return {
+                promise: compileCodeUsingJudge0(
+                    code,
+                    testCase.input,
+                    testCase.output,
+                    language_id
+                ),
+                index,
+                testCase
+            };
         });
         
-        // Wait for all test cases to complete
-        const testResults = await Promise.all(testCasePromises);
-        
-        // Check test results in order
-        for (const result of testResults) {
-            const { response, index, testCase } = result;
-            
-            if (response.status.id !== 3) {
-                // Not Accepted (Wrong Answer, TLE, Runtime Error etc.)
-                let testCaseNumber = index + 1;
-                let message = `Test case ${testCaseNumber} failed.`;
-                if (runSampleOnly === true && testCase.isSample === true) {
-                    message = `Sample test case ${testCaseNumber} failed.`;
-                }
-                return res.status(200).json({
-                    overallStatus: response.status.description,
-                    message: message,
-                    failedTestCaseNumber: testCaseNumber,
-                    details: response,
-                });
+        // Execute test cases with early termination
+        let failedResult = null;
+        const testResults = [];
+
+        // Use a race-based approach for early termination
+        for (let i = 0; i < testCasePromises.length; i++) {
+            if (signal.aborted) {
+                break;
             }
+
+            const currentBatch = testCasePromises.slice(i, i + 3); // Process 3 test cases concurrently
+            const results = await Promise.all(
+                currentBatch.map(async ({ promise, index, testCase }) => {
+                    try {
+                        if (signal.aborted) return null;
+                        
+                        const response = await promise;
+                        console.log(
+                            `Test case ${index + 1} response status: ${response.status.id} - ${response.status.description}`
+                        );
+                        
+                        if (response.status.id !== 3) {
+                            // Test case failed - signal abort and return the error
+                            controller.abort();
+                            return {
+                                failed: true,
+                                response,
+                                index,
+                                testCase
+                            };
+                        }
+                        
+                        return {
+                            failed: false,
+                            response,
+                            index,
+                            testCase
+                        };
+                    } catch (error) {
+                        console.error(`Error executing test case ${index + 1}:`, error);
+                        return null;
+                    }
+                })
+            );
+            
+            // Filter out nulls and add valid results
+            const validResults = results.filter(r => r !== null);
+            testResults.push(...validResults);
+            
+            // Check if any test case in this batch failed
+            const failed = validResults.find(r => r.failed);
+            if (failed) {
+                failedResult = failed;
+                break; // Stop processing test cases
+            }
+        }
+        
+        // If we have a failed test case, return its error
+        if (failedResult) {
+            const { response, index, testCase } = failedResult;
+            let testCaseNumber = index + 1;
+            let message = `Test case ${testCaseNumber} failed.`;
+            if (runSampleOnly === true && testCase.isSample === true) {
+                message = `Sample test case ${testCaseNumber} failed.`;
+            }
+            return res.status(200).json({
+                overallStatus: response.status.description,
+                message: message,
+                failedTestCaseNumber: testCaseNumber,
+                details: response,
+            });
         }
         
         // If we reach here, all tests passed
