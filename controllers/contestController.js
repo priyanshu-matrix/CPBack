@@ -124,7 +124,7 @@ async function createMatches(ContestID, round, contestDataForMatches) {
     const limit = Math.floor(Math.log2(contestDataForMatches.registeredUsers.length)) + 1; // Calculate the number of rounds needed
     
     if(round > limit) {
-        throw new Error(`Cannot create matches for round ${round}: Round exceeds the limit of ${limit} rounds.`);
+        throw new Error(`Tournament is over, no more rounds can be created.`);
     }
     const matches = [];
 
@@ -385,10 +385,18 @@ const removeProblemFromContest = async (req, res) => {
 
     // Remove the problem from the contest's problem list
     contest.problemlist.splice(problemIndex, 1);
+    
+    // Remove test cases related to this problem from contest
+    if (contest.testcases) {
+      contest.testcases = contest.testcases.filter(testcase => 
+        testcase.problemId !== ProblemID
+      );
+    }
+    
     await contest.save();
 
     res.status(200).json({
-      message: "Problem removed from contest successfully"
+      message: "Problem and its test cases removed from contest successfully"
     });
   } catch (error) {
     res.status(500).json({
