@@ -131,8 +131,8 @@ async function compileCodeUsingJudge0(
     try {
         const headers = {
             "Content-Type": "application/json",
-            "X-Auth-User": "",
-            "X-Auth-Token": "",
+            "X-Auth-User": process.env.JUDGE0_AUTH_USER ,
+            "X-Auth-Token": process.env.JUDGE0_AUTH_TOKEN,
         };
         
         // Use wait=true but with a shorter timeout - good balance between async and sync
