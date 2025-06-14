@@ -33,8 +33,8 @@ const getLanguages = async (req, res) => {
         const response = await axios.get(`${api_root}/languages`, {
             headers: {
                 "Content-Type": "application/json",
-                "X-Auth-User": "A7LeM6fbRMwgeMJ",
-                "X-Auth-Token": "A7LeM6fbRMwgeMJ",
+                "X-Auth-User": process.env.JUDGE0_AUTH_USER,
+                "X-Auth-Token": process.env.JUDGE0_AUTH_TOKEN,
             },
         });
 
@@ -131,8 +131,8 @@ async function compileCodeUsingJudge0(
     try {
         const headers = {
             "Content-Type": "application/json",
-            "X-Auth-User": "A7LeM6fbRMwgeMJ",
-            "X-Auth-Token": "A7LeM6fbRMwgeMJ",
+            "X-Auth-User": "",
+            "X-Auth-Token": "",
         };
         
         // Use wait=true but with a shorter timeout - good balance between async and sync
