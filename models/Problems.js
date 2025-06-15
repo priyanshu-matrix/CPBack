@@ -1,123 +1,21 @@
 const mongoose = require('mongoose');
 
 const problemSchema = new mongoose.Schema({
-    title: {
-        type: String,
-        required: true,
-        set: function(value) {
-            return Buffer.from(value).toString('base64');
-        },
-        get: function(value) {
-            return Buffer.from(value, 'base64').toString();
-        }
-    },
-    description: {
-        type: String,
-        required: true,
-        set: function(value) {
-            return Buffer.from(value).toString('base64');
-        },
-        get: function(value) {
-            return Buffer.from(value, 'base64').toString();
-        }
-    },
-    inputFormat: {
-        type: String,
-        required: true,
-        set: function(value) {
-            return Buffer.from(value).toString('base64');
-        },
-        get: function(value) {
-            return Buffer.from(value, 'base64').toString();
-        }
-    },
-    outputFormat: {
-        type: String,
-        required: true,
-        set: function(value) {
-            return Buffer.from(value).toString('base64');
-        },
-        get: function(value) {
-            return Buffer.from(value, 'base64').toString();
-        }
-    },
-    examples: [
-        {
-            input: {
-                type: String,
-                required: true,
-                set: function(value) {
-                    return Buffer.from(value).toString('base64');
-                },
-                get: function(value) {
-                    return Buffer.from(value, 'base64').toString();
-                }
-            },
-            output: {
-                type: String,
-                required: true,
-                set: function(value) {
-                    return Buffer.from(value).toString('base64');
-                },
-                get: function(value) {
-                    return Buffer.from(value, 'base64').toString();
-                }
-            },
-            explanation: {
-                type: String,
-                required: true,
-                set: function(value) {
-                    return Buffer.from(value).toString('base64');
-                },
-                get: function(value) {
-                    return Buffer.from(value, 'base64').toString();
-                }
-            }
-        }
-    ],
-    constraints: {
-        type: [{
-            type: String,
-            required: true,
-            set: function(value) {
-                return Buffer.from(value).toString('base64');
-            },
-            get: function(value) {
-                return Buffer.from(value, 'base64').toString();
-            }
-        }],
-        required: true
-    },
-    timeLimit: {
-        type: Number,
-        required: true
-    }, // in seconds
-    memoryLimit: {
-        type: Number,
-        required: true
-    }, // in MB
-    tags: {
-        type: [{
-            type: String,
-            set: function(value) {
-                return Buffer.from(value).toString('base64');
-            },
-            get: function(value) {
-                return Buffer.from(value, 'base64').toString();
-            }
-        }],
-    }, // e.g., ['math', 'dp']
-    difficulty: {
-        type: String,
-        enum: ['Easy', 'Medium', 'Hard'],
-        default: 'Easy',
-        required: true
-    },
-    points : {
-        type: Number,
-        required: true,
-        default: 0
-    },
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    difficulty: { type: String, required: true },
+    inputFormat: { type: String, default: '' },
+    outputFormat: { type: String, default: '' },
+    examples: [{ 
+        input: String,
+        output: String,
+        explanation: String
+    }],
+    constraints: [String], // Array of strings
+    tags: [String], // Array of strings
+    timeLimit: { type: Number, default: 1 },
+    memoryLimit: { type: Number, default: 256 },
+    points: { type: Number, default: 100 }
 });
 
 module.exports = mongoose.model('Problem', problemSchema);
