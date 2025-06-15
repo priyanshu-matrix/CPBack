@@ -10,33 +10,76 @@ const path = require('path'); // Added import for path
 const createProblem = async (req, res) => {
     try {
         const { title } = req.body;
-        let { examples } = req.body; // Destructure examples
-
+        
         // Check if a problem with the same title already exists
-        const existingProblem = await Problem.findOne({ title });
+        const existingProblem = await Problem.findOne({ title: { $regex: new RegExp(`^${title}$`, 'i') } });
         if (existingProblem) {
             return res.status(400).json({ error: 'Problem already exists' });
         }
 
-        // If examples is a string, try to parse it as JSON
-        if (examples && typeof examples === 'string') {
+        // Parse JSON fields properly
+        let examples = req.body.examples;
+        let constraints = req.body.constraints;
+        let tags = req.body.tags;
+
+        // Debug logs to see what we're receiving
+        console.log('Raw examples:', examples, typeof examples);
+        console.log('Raw constraints:', constraints, typeof constraints);
+        console.log('Raw tags:', tags, typeof tags);
+
+        // Parse if they're strings
+        if (typeof examples === 'string') {
             try {
                 examples = JSON.parse(examples);
-            } catch (parseError) {
-                return res.status(400).json({ error: 'Invalid format for examples. Expected an array of objects or a valid JSON string.' });
+            } catch (e) {
+                console.error('Error parsing examples:', e);
+                examples = [];
             }
         }
 
-        // Construct the problem data, ensuring examples is correctly formatted or excluded if not provided
-        const problemData = { ...req.body };
-        if (examples) {
-            problemData.examples = examples;
-        } else {
-            // If examples are required by your schema and not provided, 
-            // Mongoose will throw a validation error. 
-            // Handle this case based on your application logic (e.g., provide default, or ensure client sends it)
-            // For now, we'll let Mongoose validation handle it if it's still missing and required.
+        if (typeof constraints === 'string') {
+            try {
+                constraints = JSON.parse(constraints);
+            } catch (e) {
+                console.error('Error parsing constraints:', e);
+                constraints = [];
+            }
         }
+
+        if (typeof tags === 'string') {
+            try {
+                tags = JSON.parse(tags);
+            } catch (e) {
+                console.error('Error parsing tags:', e);
+                tags = [];
+            }
+        }
+
+        // Ensure they are arrays
+        examples = Array.isArray(examples) ? examples : [];
+        constraints = Array.isArray(constraints) ? constraints : [];
+        tags = Array.isArray(tags) ? tags : [];
+
+        // Debug logs to see parsed values
+        console.log('Parsed examples:', examples);
+        console.log('Parsed constraints:', constraints);
+        console.log('Parsed tags:', tags);
+
+        const problemData = {
+            title: req.body.title,
+            description: req.body.description,
+            difficulty: req.body.difficulty,
+            inputFormat: req.body.inputFormat || '',
+            outputFormat: req.body.outputFormat || '',
+            timeLimit: parseInt(req.body.timeLimit) || 1,
+            memoryLimit: parseInt(req.body.memoryLimit) || 256,
+            points: parseInt(req.body.points) || 100,
+            examples: examples,
+            constraints: constraints,
+            tags: tags
+        };
+
+        console.log('Final problem data before save:', problemData);
 
         const problem = new Problem(problemData);
         await problem.save();
@@ -87,6 +130,7 @@ const createProblem = async (req, res) => {
 
         res.status(201).json({ message: 'Problem created successfully', problem });
     } catch (error) {
+        console.error('Error creating problem:', error);
         res.status(400).json({ error: error.message });
     }
 };
