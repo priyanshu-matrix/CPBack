@@ -26,13 +26,14 @@ socketWrapper.initialize(server);
 const userRoutes = require('./routes/userRoutes');
 const contestRoutes = require('./routes/contestRoutes');
 const compilerRoutes = require('./routes/compilerRoutes');
-const problemRoutes = require('./routes/problemRoutes'); // Ensure this path is correct
+const problemRoutes = require('./routes/problemRoutes');
+const testcaseRoutes = require('./routes/testcasesRoutes');
 
 app.use('/api/users', userRoutes);
 app.use('/api/contests', contestRoutes);
 app.use('/api/compiler', compilerRoutes);
-app.use('/api/problems', problemRoutes); // Ensure this path is correct
-
+app.use('/api/problems', problemRoutes);
+app.use('/api/testcases', testcaseRoutes); 
 // Connect to MongoDB
 connectDB();
 
