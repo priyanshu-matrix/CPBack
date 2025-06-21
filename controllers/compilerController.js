@@ -135,14 +135,13 @@ async function compileCodeUsingJudge0(
             "X-Auth-Token": process.env.JUDGE0_AUTH_TOKEN,
         };
         
-        // Use wait=true but with a shorter timeout - good balance between async and sync
+        // Use wait=true but with a reasonable timeout
         const res = await axios.post(
             `${api_root}/submissions?base64_encoded=true&wait=true`,
             payload,
             {
                 headers,
-                timeout: 10000, // 10 second timeout to avoid hanging requests
-                signal: AbortSignal.timeout(5000) // Additional safety to ensure we can abort requests
+                timeout: 15000 // 15 second timeout to avoid hanging requests
             }
         );
 
@@ -238,8 +237,7 @@ const submitCode = async (req, res) => {
         }
         
         // Create a controller to abort running tests when one fails
-        const controller = new AbortController();
-        const signal = controller.signal;
+        let shouldStop = false;
 
         // Process test cases with early termination
         const testCasePromises = testCasesToRun.map((testCase, index) => {
@@ -260,17 +258,14 @@ const submitCode = async (req, res) => {
         let failedResult = null;
         const testResults = [];
 
-        // Use a race-based approach for early termination
-        for (let i = 0; i < testCasePromises.length; i++) {
-            if (signal.aborted) {
-                break;
-            }
-
+        // Use a sequential approach with early termination for better error handling
+        for (let i = 0; i < testCasePromises.length && !shouldStop; i += 3) {
             const currentBatch = testCasePromises.slice(i, i + 3); // Process 3 test cases concurrently
-            const results = await Promise.all(
-                currentBatch.map(async ({ promise, index, testCase }) => {
-                    try {
-                        if (signal.aborted) return null;
+            
+            try {
+                const results = await Promise.all(
+                    currentBatch.map(async ({ promise, index, testCase }) => {
+                        if (shouldStop) return null;
                         
                         const response = await promise;
                         console.log(
@@ -278,8 +273,8 @@ const submitCode = async (req, res) => {
                         );
                         
                         if (response.status.id !== 3) {
-                            // Test case failed - signal abort and return the error
-                            controller.abort();
+                            // Test case failed - signal to stop and return the error
+                            shouldStop = true;
                             return {
                                 failed: true,
                                 response,
@@ -294,22 +289,23 @@ const submitCode = async (req, res) => {
                             index,
                             testCase
                         };
-                    } catch (error) {
-                        console.error(`Error executing test case ${index + 1}:`, error);
-                        return null;
-                    }
-                })
-            );
-            
-            // Filter out nulls and add valid results
-            const validResults = results.filter(r => r !== null);
-            testResults.push(...validResults);
-            
-            // Check if any test case in this batch failed
-            const failed = validResults.find(r => r.failed);
-            if (failed) {
-                failedResult = failed;
-                break; // Stop processing test cases
+                    })
+                );
+                
+                // Filter out nulls and add valid results
+                const validResults = results.filter(r => r !== null);
+                testResults.push(...validResults);
+                
+                // Check if any test case in this batch failed
+                const failed = validResults.find(r => r.failed);
+                if (failed) {
+                    failedResult = failed;
+                    break; // Stop processing test cases
+                }
+            } catch (error) {
+                console.error(`Error executing batch starting at test case ${i + 1}:`, error);
+                // Continue with next batch unless it's a critical error
+                continue;
             }
         }
         
