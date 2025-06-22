@@ -135,14 +135,13 @@ async function compileCodeUsingJudge0(
             "X-Auth-Token": process.env.JUDGE0_AUTH_TOKEN,
         };
         
-        // Use wait=true but with a shorter timeout - good balance between async and sync
+        // Use wait=true but with a reasonable timeout
         const res = await axios.post(
             `${api_root}/submissions?base64_encoded=true&wait=true`,
             payload,
             {
                 headers,
-                timeout: 10000, // 10 second timeout to avoid hanging requests
-                signal: AbortSignal.timeout(5000) // Additional safety to ensure we can abort requests
+                timeout: 15000 // 15 second timeout to avoid hanging requests
             }
         );
 
@@ -175,7 +174,7 @@ const submitCode = async (req, res) => {
         const Problem = require("../models/Problems");
         const Contest = require("../models/Contests");
 
-        const { language_id, code, question_id, userId, runSampleOnly, contestId } =
+        const { language_id, code, question_id, userId, runSampleOnly, contestId, timeLimit } =
             req.body;
 
         // Fetch test cases from MongoDB
@@ -217,7 +216,10 @@ const submitCode = async (req, res) => {
             }
         }
         
-        console.log(`Running ${testCasesToRun.length} test cases in parallel`);
+        // Use user-provided global time limit or default to 1.0 seconds
+        const globalTimeLimit = timeLimit || 1.0;
+        
+        console.log(`Running ${testCasesToRun.length} test cases with smart parallel execution`);
         
         // Check for compilation errors first with just one quick submission
         // This avoids wasting resources on multiple submissions if code doesn't compile
@@ -225,7 +227,8 @@ const submitCode = async (req, res) => {
             code,
             "", // Empty input for compilation check
             "",
-            language_id
+            language_id,
+            globalTimeLimit
         );
         
         if (compilationCheck.status.id === 6) {
@@ -237,109 +240,186 @@ const submitCode = async (req, res) => {
             });
         }
         
-        // Create a controller to abort running tests when one fails
-        const controller = new AbortController();
-        const signal = controller.signal;
-
-        // Process test cases with early termination
-        const testCasePromises = testCasesToRun.map((testCase, index) => {
-            console.log(`Starting test case ${index + 1}`);
-            return {
-                promise: compileCodeUsingJudge0(
-                    code,
-                    testCase.input,
-                    testCase.output,
-                    language_id
-                ),
-                index,
-                testCase
-            };
-        });
-        
-        // Execute test cases with early termination
-        let failedResult = null;
-        const testResults = [];
-
-        // Use a race-based approach for early termination
-        for (let i = 0; i < testCasePromises.length; i++) {
-            if (signal.aborted) {
-                break;
-            }
-
-            const currentBatch = testCasePromises.slice(i, i + 3); // Process 3 test cases concurrently
-            const results = await Promise.all(
-                currentBatch.map(async ({ promise, index, testCase }) => {
-                    try {
-                        if (signal.aborted) return null;
+        // Smart test case execution with immediate termination
+        const executeTestCasesSmartly = async (testCases) => {
+            // Separate sample and non-sample test cases for prioritized execution
+            const sampleTestCases = testCases.filter(tc => tc.isSample === true);
+            const nonSampleTestCases = testCases.filter(tc => tc.isSample !== true);
+            
+            // Prioritize sample test cases if available (faster feedback)
+            const orderedTestCases = [...sampleTestCases, ...nonSampleTestCases];
+            
+            // Create abort controller for immediate cancellation
+            const abortController = new AbortController();
+            let executionStopped = false;
+            let failedResult = null;
+            let completedCount = 0;
+            
+            // Create all test case promises upfront
+            const testCaseJobs = orderedTestCases.map((testCase, originalIndex) => {
+                const testCaseTimeLimit = testCase.timeLimit || globalTimeLimit;
+                const actualIndex = testCases.findIndex(tc => tc === testCase);
+                
+                return {
+                    execute: async () => {
+                        if (executionStopped) return null;
                         
-                        const response = await promise;
-                        console.log(
-                            `Test case ${index + 1} response status: ${response.status.id} - ${response.status.description}`
-                        );
-                        
-                        if (response.status.id !== 3) {
-                            // Test case failed - signal abort and return the error
-                            controller.abort();
+                        try {
+                            console.log(`Executing test case ${actualIndex + 1} (${testCase.isSample ? 'sample' : 'regular'})`);
+                            
+                            const response = await compileCodeUsingJudge0(
+                                code,
+                                testCase.input,
+                                testCase.output,
+                                language_id,
+                                testCaseTimeLimit
+                            );
+                            
+                            completedCount++;
+                            console.log(`Test case ${actualIndex + 1} completed (${completedCount}/${orderedTestCases.length}) - Status: ${response.status.description}`);
+                            
+                            // Check if test case failed
+                            if (response.status.id !== 3) {
+                                // Immediately stop all further executions
+                                executionStopped = true;
+                                abortController.abort();
+                                
+                                return {
+                                    failed: true,
+                                    response,
+                                    index: actualIndex,
+                                    testCase,
+                                    completedBeforeFailure: completedCount - 1
+                                };
+                            }
+                            
+                            return {
+                                failed: false,
+                                response,
+                                index: actualIndex,
+                                testCase
+                            };
+                        } catch (error) {
+                            if (executionStopped) return null;
+                            
+                            console.error(`Error in test case ${actualIndex + 1}:`, error.message);
+                            executionStopped = true;
+                            abortController.abort();
+                            
                             return {
                                 failed: true,
-                                response,
-                                index,
+                                error: error.message,
+                                index: actualIndex,
                                 testCase
                             };
                         }
-                        
-                        return {
-                            failed: false,
-                            response,
-                            index,
-                            testCase
-                        };
-                    } catch (error) {
-                        console.error(`Error executing test case ${index + 1}:`, error);
-                        return null;
+                    },
+                    index: actualIndex,
+                    testCase,
+                    timeLimit: testCaseTimeLimit
+                };
+            });
+            
+            // Dynamic batch sizing based on total test cases
+            const getBatchSize = (totalTests) => {
+                if (totalTests <= 5) return 2;
+                if (totalTests <= 10) return 3;
+                if (totalTests <= 20) return 4;
+                return 5; // Max 5 concurrent executions for larger test suites
+            };
+            
+            const batchSize = getBatchSize(orderedTestCases.length);
+            const results = [];
+            
+            // Execute test cases in optimized batches with immediate termination
+            for (let i = 0; i < testCaseJobs.length && !executionStopped; i += batchSize) {
+                const currentBatch = testCaseJobs.slice(i, i + batchSize);
+                
+                try {
+                    // Execute current batch with Promise.allSettled for better error handling
+                    const batchPromises = currentBatch.map(job => job.execute());
+                    const batchResults = await Promise.allSettled(batchPromises);
+                    
+                    // Process results and check for failures
+                    for (const result of batchResults) {
+                        if (result.status === 'fulfilled' && result.value) {
+                            const testResult = result.value;
+                            
+                            if (testResult.failed) {
+                                failedResult = testResult;
+                                executionStopped = true;
+                                console.log(`Test execution stopped early after ${testResult.completedBeforeFailure || 0} successful test(s)`);
+                                break;
+                            }
+                            
+                            results.push(testResult);
+                        } else if (result.status === 'rejected') {
+                            console.error('Test case execution rejected:', result.reason);
+                        }
                     }
-                })
-            );
-            
-            // Filter out nulls and add valid results
-            const validResults = results.filter(r => r !== null);
-            testResults.push(...validResults);
-            
-            // Check if any test case in this batch failed
-            const failed = validResults.find(r => r.failed);
-            if (failed) {
-                failedResult = failed;
-                break; // Stop processing test cases
+                    
+                    // Break if we found a failure
+                    if (executionStopped) break;
+                    
+                } catch (batchError) {
+                    console.error(`Batch execution error:`, batchError);
+                    // Continue with next batch unless critical
+                    if (!executionStopped) continue;
+                }
             }
-        }
+            
+            return { results, failedResult, totalCompleted: completedCount };
+        };
         
-        // If we have a failed test case, return its error
+        // Execute test cases with smart parallel processing
+        const { results: testResults, failedResult, totalCompleted } = await executeTestCasesSmartly(testCasesToRun);
+        
+        // Handle execution results
         if (failedResult) {
-            const { response, index, testCase } = failedResult;
+            const { response, index, testCase, error, completedBeforeFailure } = failedResult;
             let testCaseNumber = index + 1;
             let message = `Test case ${testCaseNumber} failed.`;
+            
+            // Add context about early termination
+            if (completedBeforeFailure !== undefined && completedBeforeFailure > 0) {
+                message += ` (${completedBeforeFailure} test case(s) passed before failure)`;
+            }
+            
             if (runSampleOnly === true && testCase.isSample === true) {
                 message = `Sample test case ${testCaseNumber} failed.`;
             }
+            
+            // Handle compilation/runtime errors vs wrong answers
+            const statusDescription = error ? "Runtime Error" : (response?.status?.description || "Unknown Error");
+            
             return res.status(200).json({
-                overallStatus: response.status.description,
+                overallStatus: statusDescription,
                 message: message,
                 failedTestCaseNumber: testCaseNumber,
-                details: response,
+                totalTestCasesExecuted: totalCompleted,
+                details: response || { error },
+                executionStats: {
+                    totalTestCases: testCasesToRun.length,
+                    executedTestCases: totalCompleted,
+                    stoppedEarly: true
+                }
             });
         }
         
         // If we reach here, all tests passed
-        const lastResponse = testResults[testResults.length - 1].response;
+        const lastResponse = testResults.length > 0 ? testResults[testResults.length - 1].response : null;
 
         // If loop completes, all test cases passed
         let message = "All test cases passed successfully!";
         if (runSampleOnly === true) {
             message = "All sample test cases passed successfully!";
         }
+        
+        // Add execution statistics
+        message += ` (${totalCompleted}/${testCasesToRun.length} test cases executed)`;
 
         // If code is accepted, mark problem as solved for the user and update contest match
-        if (lastResponse.status.id === 3 && userId) {
+        if (lastResponse && lastResponse.status.id === 3 && userId) {
             // Update user's solved problems
             const user = await User.findOne({ uid: userId }); // Use uid instead of _id since userId is likely the Firebase UID
             const problem = await Problem.findById(question_id); // Use findById since question_id is likely the problem's _id
@@ -410,6 +490,11 @@ const submitCode = async (req, res) => {
             overallStatus: "Accepted",
             message: message,
             details: lastResponse, // Contains details of the last successful test case run
+            executionStats: {
+                totalTestCases: testCasesToRun.length,
+                executedTestCases: totalCompleted,
+                stoppedEarly: false
+            }
         });
     } catch (error) {
         console.error(

@@ -22,10 +22,6 @@ const createProblem = async (req, res) => {
         let constraints = req.body.constraints;
         let tags = req.body.tags;
 
-        // Debug logs to see what we're receiving
-        console.log('Raw examples:', examples, typeof examples);
-        console.log('Raw constraints:', constraints, typeof constraints);
-        console.log('Raw tags:', tags, typeof tags);
 
         // Parse if they're strings
         if (typeof examples === 'string') {
@@ -60,10 +56,6 @@ const createProblem = async (req, res) => {
         constraints = Array.isArray(constraints) ? constraints : [];
         tags = Array.isArray(tags) ? tags : [];
 
-        // Debug logs to see parsed values
-        console.log('Parsed examples:', examples);
-        console.log('Parsed constraints:', constraints);
-        console.log('Parsed tags:', tags);
 
         const problemData = {
             title: req.body.title,
@@ -79,7 +71,6 @@ const createProblem = async (req, res) => {
             tags: tags
         };
 
-        console.log('Final problem data before save:', problemData);
 
         const problem = new Problem(problemData);
         await problem.save();
@@ -95,13 +86,14 @@ const createProblem = async (req, res) => {
             for (const fileName in files) {
                 if (!files[fileName].dir) {
                     const fileData = await files[fileName].async('string');
-                    if (fileName.startsWith('input') && fileName.endsWith('.txt')) {
-                        const match = fileName.match(/input(\d+)\.txt/);
+                    const baseName = path.basename(fileName); // Use only the filename
+                    if (baseName.startsWith('input') && baseName.endsWith('.txt')) {
+                        const match = baseName.match(/input(.+)\.txt/);
                         if (match) {
                             inputFiles[match[1]] = fileData;
                         }
-                    } else if (fileName.startsWith('output') && fileName.endsWith('.txt')) {
-                        const match = fileName.match(/output(\d+)\.txt/);
+                    } else if (baseName.startsWith('output') && baseName.endsWith('.txt')) {
+                        const match = baseName.match(/output(.+)\.txt/);
                         if (match) {
                             outputFiles[match[1]] = fileData;
                         }

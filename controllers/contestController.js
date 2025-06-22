@@ -119,9 +119,15 @@ async function createMatches(ContestID, round, contestDataForMatches) {
             }
         }
     }
-    
+    // Calculate the number of rounds needed based on initial registered users
+    let limit = 0;
     const n = usersList.length;
-    const limit = Math.floor(Math.log2(contestDataForMatches.registeredUsers.length)) + 1; // Calculate the number of rounds needed
+    const startuser = contestDataForMatches.registeredUsers.length;
+    if((startuser & (startuser - 1)) === 0){
+      limit = Math.floor(Math.log2(startuser));
+    }else{
+      limit = Math.floor(Math.log2(startuser)) + 1;
+    } // Calculate the number of rounds needed
     
     if(round > limit) {
         throw new Error(`Tournament is over, no more rounds can be created.`);
