@@ -174,7 +174,7 @@ const submitCode = async (req, res) => {
         const Problem = require("../models/Problems");
         const Contest = require("../models/Contests");
 
-        const { language_id, code, question_id, userId, runSampleOnly, contestId } =
+        const { language_id, code, question_id, userId, runSampleOnly, contestId, timeLimit } =
             req.body;
 
         // Fetch test cases from MongoDB
@@ -216,6 +216,9 @@ const submitCode = async (req, res) => {
             }
         }
         
+        // Use user-provided global time limit or default to 1.0 seconds
+        const globalTimeLimit = timeLimit || 1.0;
+        
         console.log(`Running ${testCasesToRun.length} test cases in parallel`);
         
         // Check for compilation errors first with just one quick submission
@@ -224,7 +227,8 @@ const submitCode = async (req, res) => {
             code,
             "", // Empty input for compilation check
             "",
-            language_id
+            language_id,
+            globalTimeLimit
         );
         
         if (compilationCheck.status.id === 6) {
@@ -242,15 +246,19 @@ const submitCode = async (req, res) => {
         // Process test cases with early termination
         const testCasePromises = testCasesToRun.map((testCase, index) => {
             console.log(`Starting test case ${index + 1}`);
+            // Use test case specific time limit if available, otherwise use global time limit
+            const testCaseTimeLimit = testCase.timeLimit || globalTimeLimit;
             return {
                 promise: compileCodeUsingJudge0(
                     code,
                     testCase.input,
                     testCase.output,
-                    language_id
+                    language_id,
+                    testCaseTimeLimit
                 ),
                 index,
-                testCase
+                testCase,
+                timeLimit: testCaseTimeLimit
             };
         });
         
@@ -264,12 +272,12 @@ const submitCode = async (req, res) => {
             
             try {
                 const results = await Promise.all(
-                    currentBatch.map(async ({ promise, index, testCase }) => {
+                    currentBatch.map(async ({ promise, index, testCase, timeLimit: testCaseTimeLimit }) => {
                         if (shouldStop) return null;
                         
                         const response = await promise;
                         console.log(
-                            `Test case ${index + 1} response status: ${response.status.id} - ${response.status.description}`
+                            `Test case ${index + 1} (time limit: ${testCaseTimeLimit}s) response status: ${response.status.id} - ${response.status.description}`
                         );
                         
                         if (response.status.id !== 3) {
