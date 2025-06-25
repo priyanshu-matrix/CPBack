@@ -170,15 +170,13 @@ Authorization: Bearer <firebase-token>
 **Submit Code Request Body:**
 ```json
 {
-    ```json
-    {
-        "language_id": 54,
-        "code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int x, y;\n    cin >> x >> y;\n    cout << (x+y) << endl;\n    return 0;\n}",
-        "question_id": "***",
-        "userID": "***",
-        "runSampleOnly": false
-    }
-    ```
+    "language_id": 54,
+    "code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int x, y;\n    cin >> x >> y;\n    cout << (x+y) << endl;\n    return 0;\n}",
+    "question_id": "***",
+    "userID": "***",
+    "runSampleOnly": false
+}
+```
 
 > **⚠️ Important**: For production use with multiple concurrent users, it's highly recommended to deploy your own Judge0 instance rather than using public instances. This ensures:
 > - Better scalability and performance
@@ -186,148 +184,6 @@ Authorization: Bearer <firebase-token>
 > - Consistent response times
 > - Better control over supported languages and configurations
 > - Enhanced security and privacy
-
-### 📚 Problem Management (`/api/problems`)
-
-| Method | Endpoint | Description | Admin Required |
-|--------|----------|-------------|----------------|
-| `POST` | `/add` | Create new problem (with test cases file) | ✅ |
-| `PUT` | `/edit` | Edit existing problem | ✅ |
-| `DELETE` | `/delete` | Delete problem | ✅ |
-| `POST` | `/get` | Get problem by ID | ❌ |
-| `GET` | `/getall` | Get all problems | ✅ |
-
-**Create Problem Request:**
-- Method: `POST`
-- Content-Type: `multipart/form-data`
-- Fields:
-  - `title`: Problem title
-  - `description`: Problem description
-  - `difficulty`: Problem difficulty level
-  - `testCasesFile`: ZIP file containing test cases
-
-### 🧪 Test Case Management (`/api/testcases`)
-
-| Method | Endpoint | Description | Admin Required |
-|--------|----------|-------------|----------------|
-| `POST` | `/delete` | Delete test case | ✅ |
-
-## 🔌 Socket.IO Events
-
-### Client Events
-- `joinUserRoom`: Join user-specific room for real-time updates
-  ```javascript
-  socket.emit('joinUserRoom', userId);
-  ```
-
-### Server Events
-- `connection`: New client connected
-- `disconnect`: Client disconnected
-
-## 📊 Data Models
-
-### User Schema
-```javascript
-{
-  uid: String,                    // Firebase UID
-  email: String,
-  name: String,
-  isAdmin: Boolean,
-  registeredContests: [{
-    contestId: ObjectId,
-    status: String,              // 'primary', 'semi-finalists', 'finalists'
-    registeredAt: Date
-  }],
-  solvedProblems: [{
-    problemId: ObjectId,
-    solvedAt: Date
-  }]
-}
-```
-
-### Contest Schema
-```javascript
-{
-  id: String,
-  title: String,
-  date: String,
-  duration: String,
-  type: String,                  // 'tournament', 'practice'
-  status: String,                // 'upcoming', 'active', 'completed'
-  problems: [ObjectId],
-  registeredUsers: [String],     // Firebase UIDs
-  matches: [{
-    matchId: String,
-    user1: String,
-    user2: String,
-    winner: String,
-    status: String,              // 'pending', 'completed'
-    problemId: String
-  }]
-}
-```
-
-### Problem Schema
-```javascript
-{
-  title: String,
-  description: String,
-  difficulty: String,            // 'easy', 'medium', 'hard'
-  timeLimit: Number,
-  memoryLimit: Number,
-  testCases: [ObjectId],
-  createdAt: Date
-}
-```
-
-## 🚦 Error Handling
-
-The API uses standard HTTP status codes:
-- `200`: Success
-- `201`: Created
-- `400`: Bad Request
-- `401`: Unauthorized
-- `403`: Forbidden
-- `404`: Not Found
-- `500`: Internal Server Error
-
-## 🔒 Security Features
-
-- Firebase token verification for all authenticated routes
-- Admin-only access for critical operations
-- Input validation and sanitization
-- CORS configuration
-- Secure file upload handling
-
-## 🌍 Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | Server port number | No (default: 3000) |
-| `NODE_ENV` | Environment mode | No (default: development) |
-| `MONGO` | MongoDB connection string | Yes |
-| `JUDGE0` | Judge0 API endpoint | Yes |
-| `JUDGE0_AUTH_USER` | Judge0 authentication user | No |
-| `JUDGE0_AUTH_TOKEN` | Judge0 authentication token | No |
-
-> **💡 Tip**: For production environments, use your own Judge0 instance URL (e.g., `https://your-judge0-domain.com`) instead of public instances to ensure better performance and reliability.
-
-## 🚀 Deployment
-
-### Judge0 Instance Setup (Production Deployment)
-
-For handling alot of concurrent users, deploying your own Judge0 infrastructure is **essential**:
-
-#### Single Instance Setup (Up to 100 concurrent users)
-```bash
-# Using Docker Compose
-git clone https://github.com/judge0/judge0.git
-cd judge0
-docker-compose up -d db redis
-# Wait for database and redis to start
-docker-compose up -d
-# Available at http://localhost:2358
-```
 
 #### High-Scale Deployment (1000+ concurrent users)
 ```bash
