@@ -170,7 +170,7 @@ Authorization: Bearer <firebase-token>
 **Submit Code Request Body:**
 ```json
 {
-    "language_id": 54,
+    "language_id": 54, //for cpp
     "code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int x, y;\n    cin >> x >> y;\n    cout << (x+y) << endl;\n    return 0;\n}",
     "question_id": "***",
     "userID": "***",
