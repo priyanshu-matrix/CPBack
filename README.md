@@ -170,12 +170,15 @@ Authorization: Bearer <firebase-token>
 **Submit Code Request Body:**
 ```json
 {
-    "language": "cpp",
-    "code": "your_code_here",
-    "input": "test_input",
-    "problemId": "problem_id_optional"
-}
-```
+    ```json
+    {
+        "language_id": 54, //for cpp
+        "code": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int x, y;\n    cin >> x >> y;\n    cout << (x+y) << endl;\n    return 0;\n}",
+        "question_id": "***",
+        "userID": "***",
+        "runSampleOnly": false
+    }
+    ```
 
 > **⚠️ Important**: For production use with multiple concurrent users, it's highly recommended to deploy your own Judge0 instance rather than using public instances. This ensures:
 > - Better scalability and performance
